@@ -1,5 +1,5 @@
 # Etapa base
-FROM denoland/deno:1.44.4
+FROM denoland/deno:1.42.4
 
 
 # Diretório de trabalho
