@@ -12,24 +12,9 @@ import { WebMessage } from "../models/enteties/message.ts";
 
 // Schema para validar o ID do agente na URL
 const paramSchema = z.object({
-  id: z.string().uuid("ID de agente inválido na URL."),
+  id: z.uuid("ID de agente inválido na URL."),
 });
 
-// Schema para validar o corpo do webhook da Evolution API
-const webhookBodySchema = z.object({
-  instance: z.string(),
-  data: z.object({
-    // O objeto message pode não existir em todos os eventos
-    message: z.object({
-      // A conversa pode ser nula (ex: em mensagens de imagem)
-      conversation: z.string().nullable().optional(),
-    }).nullable().optional(),
-    key: z.object({
-      remoteJid: z.string(),
-      fromMe: z.boolean(),
-    }),  
-  }),
-});
 
 export const webhookController = async (app: FastifyInstance) => {
   const repository = new CachedAgentRepository(new AgentRespositoryImpl(supabase));
@@ -39,20 +24,19 @@ export const webhookController = async (app: FastifyInstance) => {
 
     // 1. Validar parâmetros da URL e corpo da requisição
     const parsedParams = paramSchema.safeParse(request.params);
-    const parsedBody = webhookBodySchema.safeParse(request.body);
+    const body = request.body
 
-    if (!parsedParams.success || !parsedBody.success) {
+    if (!parsedParams.success) {
       return reply.status(400).send({
         error: "Dados do webhook inválidos",
         params: !parsedParams.success ? z.treeifyError(parsedParams.error) : undefined,
-        body: !parsedBody.success ? z.treeifyError(parsedBody.error) : undefined,
       });
     }
 
     // 2. Extrair dados validados
     const { id: agentId } = parsedParams.data;
-    const { instance, data } = parsedBody.data;
-    const { message, key } = data;
+    const { instance, data } = body as { instance: string, data: unknown};
+    const { message, key } = data as { message: { conversation: string | undefined}, key: { fromMe: boolean, remoteJid: string}};
 
     // Apenas processar mensagens de texto recebidas
     const messageContent = message?.conversation;
@@ -89,7 +73,7 @@ export const webhookController = async (app: FastifyInstance) => {
       };
       const aiMessage: WebMessage = {
         id: new ID(`msg-${Date.now()}-ai`),
-        content: agentMessage,
+        content: "test",
         fromMe: true,
         conversationId: agent.id,
       };
@@ -99,6 +83,7 @@ export const webhookController = async (app: FastifyInstance) => {
       const evoService = new EvolutionApiService({ apiKey: Deno.env.get("EVOLUTION_API_KEY")!, url: Deno.env.get("EVOLUTION_API_URL")! });
 
       await evoService.sendMessage({ instance, message: JSON.stringify(agentMessage), number: key.remoteJid });
+      console.log("MENSAGE SEND")
 
       reply.status(200).send({ success: true });
     } catch (error) {

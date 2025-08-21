@@ -12,7 +12,7 @@ const app = Fastify({
 
 
 // Register Swagger
-await app.register(swagger, {
+await app.register(swagger, { 
   openapi: {
     info: {
       title: "OiChat MVP API",
@@ -20,8 +20,7 @@ await app.register(swagger, {
       version: "0.1.0",
     },
     components: {
-      schemas: {
-      }
+      schemas: {}
     },    
     tags: [
       { name: 'Agent', description: 'Agent management endpoints' },
@@ -33,6 +32,7 @@ await app.register(swagger, {
 // Register Swagger UI
 await app.register(swaggerUi, {
   routePrefix: "/docs",
+  theme: {title: 'OiChat API'}
 });
 
 // Declare a route
