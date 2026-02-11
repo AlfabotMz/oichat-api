@@ -11,8 +11,8 @@ const app = Fastify({
 
 
 
-// Register Swagger
-await app.register(swagger, { 
+// Registrar Swagger
+await app.register(swagger, {
   openapi: {
     info: {
       title: "OiChat MVP API",
@@ -21,7 +21,7 @@ await app.register(swagger, {
     },
     components: {
       schemas: {}
-    },    
+    },
     tags: [
       { name: 'Agent', description: 'Agent management endpoints' },
       { name: 'Conversation', description: 'Conversation and memory endpoints' }
@@ -29,13 +29,13 @@ await app.register(swagger, {
   },
 });
 
-// Register Swagger UI
+// Registrar Swagger UI
 await app.register(swaggerUi, {
   routePrefix: "/docs",
-  theme: {title: 'OiChat API'}
+  theme: { title: 'OiChat API' }
 });
 
-// Declare a route
+// Declarar uma rota
 app.get('/', function (_request, reply) {
   reply.status(200).send({ ok: true })
 })
@@ -43,18 +43,17 @@ app.get('/', function (_request, reply) {
 app.register(router)
 
 const start = async () => {
-    try {
-      await initializeRedis();
-      await app.listen({ port: 3000, host: '0.0.0.0' });
-      app.log.info(`Swagger UI available at http://localhost:3000/docs`);
-    } catch (err) {
-      app.log.error(err)
-      Deno.exit(1) 
-    }
+  try {
+    await initializeRedis();
+    await app.listen({ port: 3000, host: '0.0.0.0' });
+    app.log.info(`Swagger UI available at http://localhost:3000/docs`);
+  } catch (err) {
+    app.log.error(err)
+    Deno.exit(1)
   }
+}
 
 
 if (import.meta.main) {
-    start()
+  start()
 }
-  

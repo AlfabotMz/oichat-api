@@ -8,7 +8,7 @@ export interface EvolutionApiConfig {
 export class EvolutionApiService {
     private config: EvolutionApiConfig;
 
-    constructor (config: EvolutionApiConfig) {
+    constructor(config: EvolutionApiConfig) {
         this.config = config;
     }
 
@@ -16,32 +16,32 @@ export class EvolutionApiService {
         return this.config.url;
     }
 
-    public sendMessage(params: {instance: string, message: string, number: string }) {
+    public sendMessage(params: { instance: string, message: string, number: string }) {
         const { instance, message, number } = params
 
         const options = {
             method: 'POST',
-            headers: {apikey: this.config.apiKey, 'Content-Type': 'application/json'},
+            headers: { apikey: this.config.apiKey, 'Content-Type': 'application/json' },
             body: `{"number":"${number}","text":${message},"options":{"quoted":{"key":{"remoteJid":"${number}"}}}}`
         };
 
         console.log("RUNNIG")
 
         fetch(`${this.config.url}/message/sendText/${instance}`, options)
-        .then((response) => response.json())
-        .then((_) => {})
-        .catch((err) => console.error(err));   
+            .then((response) => response.json())
+            .then((_) => { })
+            .catch((err) => console.error(err));
     }
 
-    public async createInstace(params: {name: string, id: ID}) {
+    public async createInstace(params: { name: string, id: ID }) {
         const { name, id } = params
-        const WEBHOOK_EVENTS = "[MESSAGES_UPSERT]" 
+        const WEBHOOK_EVENTS = "[MESSAGES_UPSERT]"
         const BASE_URL = Deno.env.get("PROJECT_BASEURL")!
-        
+
 
         const options = {
             method: 'POST',
-            headers: {apikey: this.config.apiKey, 'Content-Type': 'application/json'},
+            headers: { apikey: this.config.apiKey, 'Content-Type': 'application/json' },
             body: `{"instanceName":"${name}", "integration": "WHATSAPP-BAILEYS","webhook":{"url":"${BASE_URL}/webhook/${id.toString()}", "Content-Type": "application/json", "events":"${WEBHOOK_EVENTS}"}, "groupsIgnore":true,"readMessages":true,"alwaysOnline":true,"readStatus":false, "syncFullHistory": false}`
         };
 
@@ -52,7 +52,7 @@ export class EvolutionApiService {
                 throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`)
             }
 
-            const json = await response.json()   
+            const json = await response.json()
         } catch (error) {
             throw error
         }
@@ -62,7 +62,7 @@ export class EvolutionApiService {
     public async connectInstaceWithCode(instance: string) {
         const options = {
             method: 'GET',
-            headers: {apikey: this.config.apiKey, 'Content-Type': 'application/json'},
+            headers: { apikey: this.config.apiKey, 'Content-Type': 'application/json' },
         };
 
         try {
@@ -78,7 +78,7 @@ export class EvolutionApiService {
     public async checkInstanceState(instance: string) {
         const options = {
             method: 'GET',
-            headers: {apikey: this.config.apiKey, 'Content-Type': 'application/json'},
+            headers: { apikey: this.config.apiKey, 'Content-Type': 'application/json' },
         };
 
         try {
@@ -94,5 +94,49 @@ export class EvolutionApiService {
 
     }
 
+    public async logoutInstance(instance: string) {
+        const options = {
+            method: 'DELETE',
+            headers: { apikey: this.config.apiKey, 'Content-Type': 'application/json' },
+        };
+
+        try {
+            const response = await fetch(`${this.config.url}/instance/logout/${instance}`, options);
+            const json = await response.json();
+            return json;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    public async deleteInstance(instance: string) {
+        const options = {
+            method: 'DELETE',
+            headers: { apikey: this.config.apiKey, 'Content-Type': 'application/json' },
+        };
+
+        try {
+            const response = await fetch(`${this.config.url}/instance/delete/${instance}`, options);
+            const json = await response.json();
+            return json;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    public async fetchInstance(instance: string) {
+        const options = {
+            method: 'GET',
+            headers: { apikey: this.config.apiKey, 'Content-Type': 'application/json' },
+        };
+
+        try {
+            const response = await fetch(`${this.config.url}/instance/fetchInstances?instanceName=${instance}`, options);
+            const json = await response.json();
+            return json;
+        } catch (error) {
+            throw error;
+        }
+    }
 
 }

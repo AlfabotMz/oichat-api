@@ -1,10 +1,19 @@
 import { FastifyInstance } from "fastify";
 import { agentController } from "../controllers/agentController.ts";
 import { webhookController } from "../controllers/webhookEvolutionController.ts";
-import { whatsappController } from "../controllers/whatsappController.ts";
 
+import { businessFormController } from "../controllers/businessFormController.ts";
+import { paymentsController } from "../controllers/paymentsController.ts";
+import { profileController } from "../controllers/profileController.ts";
+import { onboardingController } from "../controllers/onboardingController.ts";
+
+// Função principal de roteamento que registra os controladores
 export default async function router(app: FastifyInstance) {
-    app.register(agentController, { prefix: "/api/agent"})
-    app.register(webhookController, {prefix: "/api/webhook"})
-    app.register(whatsappController, {prefix: "/api/whatsapp"})
+    app.register(agentController, { prefix: "/api/agents" })
+    app.register(webhookController, { prefix: "/api/webhook" })
+
+    app.register(businessFormController, { prefix: "/api/business-form" })
+    app.register(paymentsController, { prefix: "/api/payments" })
+    app.register(profileController, { prefix: "/api/profile" })
+    app.register(onboardingController, { prefix: "/api/onboarding" })
 }

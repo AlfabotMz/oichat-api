@@ -6,14 +6,23 @@ export type AgentStatus = (typeof AGENT_STATUS)[number];
 
 
 export const AgentSchema = z.object({
-    id: IDSchema,
-    userId: IDSchema,
-    status: z.enum(AGENT_STATUS).default("ACTIVE"),
-    name: z.string().min(1),
-    description: z.string().min(1),
-    prompt: z.string().min(1),
-    createdAt: z.coerce.date(),
-    updatedAt: z.coerce.date(),
+  id: IDSchema,
+  userId: IDSchema,
+  name: z.string().min(1),
+  phoneNumber: z.string().nullable().optional(),
+  status: z.string().nullable().optional().default("active"),
+  n8nWebhookUrl: z.string().url().nullable().optional(),
+  instanceName: z.string().nullable().optional(),
+  prompt: z.string().nullable().optional(),
+  anexos: z.any().nullable().optional().default({}),
+  contactOwner: z.string().nullable().optional(),
+  contactDelivery: z.string().nullable().optional(),
+  product: z.string().nullable().optional(),
+  messageDelay: z.number().nullable().optional().default(0),
+  amount: z.string().nullable().optional(),
+  customMessage: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
 })
 
 export const CreateAgentSchema = AgentSchema.omit({
