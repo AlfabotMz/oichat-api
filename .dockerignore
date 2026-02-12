@@ -8,3 +8,4 @@ coverage
 *.md
 docker-compose.yml
 test
+deno.lock
