@@ -4,6 +4,8 @@ FROM denoland/deno:2.1.4
 EXPOSE 3001
 
 WORKDIR /app
+# Ensure /app is owned by deno user
+RUN chown -R deno:deno /app
 
 # Prefer not to run as root.
 USER deno
