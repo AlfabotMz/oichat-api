@@ -17,7 +17,7 @@ USER deno
 
 # These steps will be re-run upon each file change in your working directory:
 COPY --chown=deno:deno . .
-# Compile the main app so that it doesn't need to be compiled each startup/entry.
-RUN deno cache src/main.ts
+# Remove explicit cache step to avoid build-time runtime issues
+# RUN deno cache src/main.ts
 
 CMD ["run", "--allow-net", "--allow-read", "--allow-env", "--allow-sys", "src/main.ts"]
