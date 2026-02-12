@@ -45,7 +45,7 @@ app.register(router)
 const start = async () => {
   try {
     await initializeRedis();
-    await app.listen({ port: 3000, host: '0.0.0.0' });
+    await app.listen({ port: 3001, host: '0.0.0.0' });
     app.log.info(`Swagger UI available at http://localhost:3000/docs`);
   } catch (err) {
     app.log.error(err)

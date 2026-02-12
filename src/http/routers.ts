@@ -9,8 +9,8 @@ import { onboardingController } from "../controllers/onboardingController.ts";
 
 // Função principal de roteamento que registra os controladores
 export default async function router(app: FastifyInstance) {
-    app.register(agentController, { prefix: "/api/agents" })
-    app.register(webhookController, { prefix: "/api/webhook" })
+    app.register(agentController, { prefix: "/api" })
+    app.register(webhookController, { prefix: "/webhook" })
 
     app.register(businessFormController, { prefix: "/api/business-form" })
     app.register(paymentsController, { prefix: "/api/payments" })

@@ -1,17 +1,32 @@
 create table if not exists public.agents (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references public.users(id) on delete cascade,
-  status text not null default 'ACTIVE' check (status in ('ACTIVE', 'INACTIVE')),
+  id uuid not null default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
-  description text not null,
-  prompt text not null,
-  created_at timestamp without time zone not null default now(),
-  updated_at timestamp without time zone not null default now()
-);
+  phone_number text null,
+  status text null default 'active'::text,
+  n8n_webhook_url text null,
+  created_at timestamp without time zone null default now(),
+  updated_at timestamp without time zone null default now(),
+  "instanceName" text null,
+  prompt text null,
+  anexos jsonb null default '{}'::jsonb,
+  contact_owner text null,
+  contact_delivery text null,
+  product text null,
+  message_delay integer null default 0,
+  amount text null,
+  custom_message text null,
+  prompt_type text null default 'dropshipper'::text,
+  audience text null,
+  tone text null,
+  product_description text null,
+  prompt_generated text null,
+  constraint agents_pkey primary key (id),
+  constraint agents_instanceName_key unique ("instanceName")
+) tablespace pg_default;
 
 create index if not exists idx_agents_user_id on public.agents (user_id);
 create index if not exists idx_agents_name on public.agents (name);
-
 
 create or replace function update_updated_at_column()
 returns trigger as $$

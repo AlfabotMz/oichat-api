@@ -22,7 +22,7 @@ const analyticsRepository = new AnalyticsRepositoryImpl(supabase)
 export const agentController = async (app: FastifyInstance) => {
 
   // n8n compatible endpoint
-  app.post("/create-agent", {
+  app.post("/agents/create-agent", {
     schema: {
       summary: 'Criar um novo agente (n8n compatível)',
       tags: ['Agente'],
@@ -94,7 +94,7 @@ export const agentController = async (app: FastifyInstance) => {
   });
 
   // n8n compatible delete endpoint
-  app.post("/delete-agent", {
+  app.post("/agents/delete-agent", {
     schema: {
       summary: 'Deletar um agente (n8n compatível)',
       tags: ['Agente'],
@@ -166,7 +166,7 @@ export const agentController = async (app: FastifyInstance) => {
   const connectInstanceValidationSchema = z.object({ agent_id: z.string().min(1) });
   type ConnectInstanceBody = { agent_id: string };
 
-  app.post("/connect-whatsapp", {
+  app.post("/agents/connect-whatsapp", {
     schema: {
       summary: "Connect agent to WhatsApp (n8n compatible)",
       tags: ["Agent"],
@@ -181,12 +181,15 @@ export const agentController = async (app: FastifyInstance) => {
 
     try {
       // 1. Get Agent
+      app.log.info(`[connect-whatsapp] Buscando agente ${agent_id}`);
       const agent = await repository.findById(ID.from(agent_id));
       if (!agent) {
         return reply.status(404).send({ success: false, message: "Agente não encontrado" });
       }
 
       const instanceName = agent.instanceName || agent.id.toString();
+      app.log.info(`[connect-whatsapp] Instance name: ${instanceName}`);
+
       const evoService = new EvolutionApiService({
         apiKey: Deno.env.get("EVOLUTION_API_KEY")!,
         url: Deno.env.get("EVOLUTION_API_URL")!
@@ -195,13 +198,22 @@ export const agentController = async (app: FastifyInstance) => {
       // 2. Check Instance State
       let connectionState;
       try {
+        app.log.info(`[connect-whatsapp] Verificando estado da instância ${instanceName}`);
         connectionState = await evoService.checkInstanceState(instanceName);
+        app.log.info(`[connect-whatsapp] Estado da conexão:`, connectionState);
       } catch (e) {
-        app.log.warn(`Instance ${instanceName} might not exist yet: ${e}`);
+        app.log.warn(`[connect-whatsapp] Instance ${instanceName} might not exist yet: ${e}`);
         // If it doesn't exist, create it
         try {
+          app.log.info(`[connect-whatsapp] Criando nova instância ${instanceName}`);
           await evoService.createInstace({ name: instanceName, id: agent.id });
+          app.log.info(`[connect-whatsapp] Instância criada com sucesso`);
+
+          // Wait for instance to be ready
+          app.log.info(`[connect-whatsapp] Aguardando instância ficar pronta...`);
+          await new Promise(resolve => setTimeout(resolve, 1500));
         } catch (createErr) {
+          app.log.error(`[connect-whatsapp] Erro ao criar instância:`, createErr);
           return reply.status(500).send({ success: false, message: `Erro ao criar instância: ${createErr}` });
         }
       }
@@ -209,28 +221,45 @@ export const agentController = async (app: FastifyInstance) => {
       // 3. If connected, disconnect (logout)
       if (connectionState?.instance?.state === "open") {
         try {
+          app.log.info(`[connect-whatsapp] Instância já conectada, fazendo logout...`);
           await evoService.logoutInstance(instanceName);
+          app.log.info(`[connect-whatsapp] Logout realizado com sucesso`);
         } catch (logoutErr) {
-          app.log.warn(`Erro ao desconectar instância ${instanceName}: ${logoutErr}`);
+          app.log.warn(`[connect-whatsapp] Erro ao desconectar instância ${instanceName}: ${logoutErr}`);
         }
       }
 
       // 4. Connect and get QR Code
       try {
+        app.log.info(`[connect-whatsapp] Solicitando QR code para ${instanceName}`);
         const connectData = await evoService.connectInstaceWithCode(instanceName);
+        app.log.info(`[connect-whatsapp] Resposta da Evolution API:`, JSON.stringify(connectData));
 
+        // Check various possible QR code field names
+        const qrCode = connectData.base64 || connectData.code || connectData.qrcode || connectData.qr;
+
+        if (!qrCode) {
+          app.log.error(`[connect-whatsapp] QR code não encontrado na resposta. Campos disponíveis:`, Object.keys(connectData));
+          return reply.status(500).send({
+            success: false,
+            message: `QR code não encontrado na resposta da API. Resposta: ${JSON.stringify(connectData)}`
+          });
+        }
+
+        app.log.info(`[connect-whatsapp] QR code gerado com sucesso`);
         reply.status(200).send({
           success: true,
-          qr: connectData.base64 || connectData.code, // Evolution returns base64 for QR image
+          qr: qrCode,
           status: "pending",
           message: "Escaneie o QR code para conectar seu número de WhatsApp."
         });
       } catch (connectErr) {
+        app.log.error(`[connect-whatsapp] Erro ao gerar QR code:`, connectErr);
         reply.status(500).send({ success: false, message: `Erro ao gerar QR code: ${connectErr}` });
       }
 
     } catch (error) {
-      app.log.error(error, "Error in connect-whatsapp flow");
+      app.log.error(error, "[connect-whatsapp] Error in connect-whatsapp flow");
       reply.status(500).send({
         success: false,
         message: `Erro interno: ${error}`
@@ -238,8 +267,55 @@ export const agentController = async (app: FastifyInstance) => {
     }
   });
 
+  // Update prompt endpoint
+  app.post("/agents/update-prompt", {
+    schema: {
+      summary: "Update agent prompt",
+      tags: ["Agent"],
+      body: {
+        type: "object",
+        properties: {
+          agent_id: { type: "string" },
+          prompt: { type: "string" },
+          action: { type: "string" }
+        },
+        required: ["agent_id", "prompt"]
+      }
+    },
+  }, async (request, reply) => {
+    const body = request.body as any;
+    const { agent_id, prompt } = body;
+
+    if (!agent_id || !prompt) {
+      return reply.status(400).send({
+        success: false,
+        message: "Agent ID and prompt are required"
+      });
+    }
+
+    try {
+      const id = ID.from(agent_id);
+
+      // Update in DB and potentially cache depending on repository implementation
+      // The setPrompt method in AgentRepositoryImpl updates the DB
+      // The CachedAgentRepository should handle cache invalidation/update
+      await repository.setPrompt(id, prompt);
+
+      return reply.status(200).send({
+        success: true,
+        message: "Prompt updated successfully"
+      });
+    } catch (error) {
+      app.log.error(error, "Error updating prompt");
+      return reply.status(500).send({
+        success: false,
+        message: `Error updating prompt: ${error}`
+      });
+    }
+  });
+
   // n8n compatible check-status endpoint
-  app.post("/check-status", {
+  app.post("/agents/check-status", {
     schema: {
       summary: "Check agent connection status (n8n compatible)",
       tags: ["Agent"],

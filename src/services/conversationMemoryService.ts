@@ -3,9 +3,8 @@ import { WebMessage } from "../models/enteties/message.ts";
 import { ID } from "../shared/types.ts";
 
 const CONVERSATION_PREFIX = "conversation:";
-const MEMORY_TTL_SECONDS = 3600; // Test Memoria 1h
-// const MEMORY_TTL_SECONDS = 259200; // Memória de 72 horas
-const MAX_MESSAGES = 100; // Guarda as últimas 100 mensagens
+const MEMORY_TTL_SECONDS = 172800; // 48 horas (2 dias)
+const MAX_MESSAGES = 30; // Guarda as últimas 30 mensagens
 
 export class RedisConversationMemory {
 
@@ -16,10 +15,10 @@ export class RedisConversationMemory {
     async addMessage(conversationId: string, message: WebMessage): Promise<void> {
         const redis = getRedisClient();
         const messageJson = JSON.stringify(message);
-        
+
         // Adiciona a nova mensagem à direita (final) da lista
         await redis.rPush(conversationId, messageJson);
-        
+
         // Mantém a lista com no máximo MAX_MESSAGES, removendo as mais antigas
         await redis.lTrim(conversationId, -MAX_MESSAGES, -1);
 

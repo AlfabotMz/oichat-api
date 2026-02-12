@@ -1,11 +1,18 @@
 import { createClient, RedisClientType } from "redis";
 import "@std/dotenv";
 
-// The redis npm library prefers a URL format.
-// For Docker, the host is the service name ('redis'). For local dev, it's 'localhost'.
-const redisHost = Deno.env.get("REDIS_HOST") || "localhost";
-const redisPort = Deno.env.get("REDIS_PORT") || 6379;
-const redisUrl = `redis://${redisHost}:${redisPort}`;
+// Prioritize a full connection URL if provided
+const redisUrl = Deno.env.get("REDIS_URL") || (() => {
+  const redisHost = Deno.env.get("REDIS_HOST") || "localhost";
+  const redisPort = Deno.env.get("REDIS_PORT") || 6379;
+  const redisPass = Deno.env.get("REDIS_PASSWORD");
+  const redisUser = Deno.env.get("REDIS_USER") || "default";
+
+  if (redisPass) {
+    return `redis://${redisUser}:${redisPass}@${redisHost}:${redisPort}`;
+  }
+  return `redis://${redisHost}:${redisPort}`;
+})();
 
 let redisClient: RedisClientType;
 

@@ -16,21 +16,66 @@ export class EvolutionApiService {
         return this.config.url;
     }
 
-    public sendMessage(params: { instance: string, message: string, number: string }) {
-        const { instance, message, number } = params
+    public async sendMessage(params: {
+        instance: string,
+        message: string,
+        number: string,
+        delay?: number,
+        presence?: "composing" | "recording"
+    }) {
+        const { instance, message, number, delay, presence } = params
 
         const options = {
             method: 'POST',
             headers: { apikey: this.config.apiKey, 'Content-Type': 'application/json' },
-            body: `{"number":"${number}","text":${message},"options":{"quoted":{"key":{"remoteJid":"${number}"}}}}`
+            body: JSON.stringify({
+                number,
+                text: message,
+                delay: delay || 0,
+                presence: presence || "composing"
+            })
         };
 
-        console.log("RUNNIG")
+        try {
+            const response = await fetch(`${this.config.url}/message/sendText/${instance}`, options);
+            return await response.json();
+        } catch (err) {
+            console.error(err);
+            throw err;
+        }
+    }
 
-        fetch(`${this.config.url}/message/sendText/${instance}`, options)
-            .then((response) => response.json())
-            .then((_) => { })
-            .catch((err) => console.error(err));
+    public async sendMedia(params: {
+        instance: string,
+        number: string,
+        media: string, // URL or base64
+        mediatype: "image" | "video" | "audio" | "document",
+        caption?: string,
+        delay?: number,
+        presence?: "composing" | "recording"
+    }) {
+        const { instance, number, media, mediatype, caption, delay, presence } = params;
+
+        const options = {
+            method: 'POST',
+            headers: { apikey: this.config.apiKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                number,
+                media,
+                mediatype,
+                caption: caption || "",
+                delay: delay || 0,
+                presence: presence || "composing"
+            })
+        };
+
+        try {
+            const response = await fetch(`${this.config.url}/message/sendMedia/${instance}`, options);
+            return await response.json();
+        } catch (err) {
+            console.error(err);
+            throw err;
+        }
     }
 
     public async createInstace(params: { name: string, id: ID }) {
@@ -68,9 +113,16 @@ export class EvolutionApiService {
         try {
             const response = await fetch(`${this.config.url}/instance/connect/${instance}`, options)
 
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP error! status: ${response.status} ${response.statusText}. Response: ${errorText}`)
+            }
+
             const json = await response.json()
+            console.log('[EvolutionAPI] connectInstaceWithCode response:', JSON.stringify(json));
             return json
         } catch (error) {
+            console.error('[EvolutionAPI] Error in connectInstaceWithCode:', error);
             throw error
         }
     }
@@ -84,10 +136,17 @@ export class EvolutionApiService {
         try {
             const response = await fetch(`${this.config.url}/instance/connectionState/${instance}`, options)
 
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP error! status: ${response.status} ${response.statusText}. Response: ${errorText}`)
+            }
+
             const json = await response.json()
+            console.log('[EvolutionAPI] checkInstanceState response:', JSON.stringify(json));
             return json
 
         } catch (error) {
+            console.error('[EvolutionAPI] Error in checkInstanceState:', error);
             throw error
         }
 

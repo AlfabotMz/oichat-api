@@ -1,25 +1,25 @@
 version: '3.8'
 
 services:
-  app:
+  api:
     build: .
+    container_name: oichat-api
     ports:
-      - "3000:3000"
+      - "3001:3001"
     environment:
-      - REDIS_HOST=redis
+      - PROJECT_BASEURL=${PROJECT_BASEURL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_API_BASE=${OPENROUTER_API_BASE}
+      - MODEL_NAME=${MODEL_NAME}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL}
+      - PORT=3001
     env_file:
       - .env
-    depends_on:
-      - redis
-    # Garante que o Deno tenha as permissões necessárias
-    command: [ "deno", "run", "--allow-net", "--allow-env", "--allow-read", "--allow-sys", "src/main.ts" ]
-
-  redis:
-    image: "redis:7-alpine"
-    ports:
-      - "6379:6379"
+    restart: always
     volumes:
-      - redis_data:/data
-
-volumes:
-  redis_data:
+      - .:/app
+      - /app/node_modules
+    command: [ "run", "--allow-net", "--allow-read", "--allow-env", "--watch", "src/main.ts" ]

@@ -14,7 +14,7 @@ type StorableAgent = Omit<Agent, 'id' | 'userId' | 'createdAt' | 'updatedAt'> & 
     updatedAt: string; // ISO string
 };
 
-export class CachedAgentRepository  {
+export class CachedAgentRepository {
     private primaryRepository: AgentRepository;
 
     constructor(primaryRepository: AgentRepository) {
@@ -82,6 +82,13 @@ export class CachedAgentRepository  {
         const redis = getRedisClient();
         await this.primaryRepository.delete(id);
         // Invalida o cache
+        const cacheKey = `${AGENT_PREFIX}${id.toString()}`;
+        await redis.del(cacheKey);
+    }
+
+    async setPrompt(id: ID, prompt: string): Promise<void> {
+        await this.primaryRepository.setPrompt(id, prompt);
+        const redis = getRedisClient();
         const cacheKey = `${AGENT_PREFIX}${id.toString()}`;
         await redis.del(cacheKey);
     }
