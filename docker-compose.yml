@@ -10,26 +10,10 @@ services:
       - .env
     environment:
       - PORT=3001
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      - redis
+      # Overwrite PROJECT_BASEURL if valid in .env, otherwise default or set explicitly here
+      - PROJECT_BASEURL=${PROJECT_BASEURL:-http://localhost:3001}
     restart: always
     volumes:
       - .:/app
       - /app/node_modules
-    command: [ "run", "--allow-net", "--allow-read", "--allow-env", "--watch", "src/main.ts" ]
-
-  redis:
-    image: redis:alpine
-    container_name: oichat-redis
-    ports:
-      - "6379:6379"
-    restart: always
-    volumes:
-      - redis_data:/data
-
-volumes:
-  redis_data:
+    command: [ "run", "--allow-net", "--allow-read", "--allow-env", "--allow-sys", "src/main.ts" ]
