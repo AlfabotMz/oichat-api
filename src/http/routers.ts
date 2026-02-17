@@ -16,4 +16,12 @@ export default async function router(app: FastifyInstance) {
     app.register(paymentsController, { prefix: "/api/payments" })
     app.register(profileController, { prefix: "/api/profile" })
     app.register(onboardingController, { prefix: "/api/onboarding" })
+
+    app.get("/health", async (_request, reply) => {
+        reply.status(200).send({
+            status: "ok",
+            timestamp: new Date().toISOString(),
+            uptime: Math.floor(performance.now() / 1000)
+        });
+    });
 }

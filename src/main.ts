@@ -35,10 +35,32 @@ await app.register(swaggerUi, {
   theme: { title: 'OiChat API' }
 });
 
-// Declarar uma rota
 app.get('/', function (_request, reply) {
   reply.status(200).send({ ok: true })
 })
+
+import { notificationService } from "./services/notificationService.ts";
+
+app.setErrorHandler(async (error, request, reply) => {
+  app.log.error(error);
+
+  // Somente enviar alerta para erros 500 (ou erros inesperados)
+  const statusCode = error.statusCode || 500;
+
+  if (statusCode >= 500) {
+    await notificationService.sendErrorAlert(error, {
+      method: request.method,
+      url: request.url,
+      body: request.body
+    });
+  }
+
+  reply.status(statusCode).send({
+    success: false,
+    message: statusCode >= 500 ? "Internal Server Error" : error.message,
+    code: error.code
+  });
+});
 
 app.register(router)
 
