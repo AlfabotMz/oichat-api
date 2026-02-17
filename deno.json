@@ -15,6 +15,7 @@
     "@langchain/core": "npm:@langchain/core@^0.3.0",
     "redis": "npm:redis@^5.6.0",
     "zod": "npm:zod@^3.25.76",
-    "zod-to-json-schema": "npm:zod-to-json-schema@^3.24.6"
+    "zod-to-json-schema": "npm:zod-to-json-schema@^3.24.6",
+    "pino-pretty": "npm:pino-pretty@^10.0.0"
   }
 }

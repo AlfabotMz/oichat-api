@@ -9,6 +9,29 @@ const app = Fastify({
   logger: true
 });
 
+// Manual log rotation and file writing for Deno compatibility
+const LOG_FILE = "./logs/app.log";
+try {
+  await Deno.mkdir("./logs", { recursive: true });
+} catch (_) { }
+
+// Middleware to log request/response to file manually if pino transport fails
+app.addHook('onResponse', async (request, reply) => {
+  const logEntry = {
+    level: reply.statusCode >= 500 ? 50 : (reply.statusCode >= 400 ? 40 : 30),
+    time: Date.now(),
+    msg: `request completed`,
+    res: { statusCode: reply.statusCode },
+    req: { method: request.method, url: request.url },
+    responseTime: reply.getResponseTime()
+  };
+  try {
+    await Deno.writeTextFile(LOG_FILE, JSON.stringify(logEntry) + "\n", { append: true });
+  } catch (err) {
+    console.error("Failed to write to log file:", err);
+  }
+});
+
 
 
 // Registrar Swagger

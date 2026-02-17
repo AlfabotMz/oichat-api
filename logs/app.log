@@ -1,0 +1,16 @@
+{"level":30,"time":1771361407023,"pid":13504,"hostname":"DESKTOP-L7C4B0U","msg":"Server listening at http://0.0.0.0:3001"}
+{"level":30,"time":1771361407024,"pid":13504,"hostname":"DESKTOP-L7C4B0U","msg":"Swagger UI available at http://localhost:3000/docs"}
+{"level":30,"time":1771361457838,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-1","req":{"method":"GET","url":"/health","hostname":"localhost:3001","remoteAddress":"127.0.0.1","remotePort":53939},"msg":"incoming request"}
+{"level":30,"time":1771361457844,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-1","res":{"statusCode":200},"responseTime":5.575200000021141,"msg":"request completed"}
+{"level":30,"time":1771361457913,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-2","req":{"method":"GET","url":"/favicon.ico","hostname":"localhost:3001","remoteAddress":"127.0.0.1","remotePort":53939},"msg":"incoming request"}
+{"level":30,"time":1771361457913,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-2","msg":"Route GET:/favicon.ico not found"}
+{"level":30,"time":1771361457915,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-2","res":{"statusCode":404},"responseTime":1.7734000000054948,"msg":"request completed"}
+{"level":30,"time":1771361463256,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-3","req":{"method":"GET","url":"/logs","hostname":"localhost:3001","remoteAddress":"127.0.0.1","remotePort":53939},"msg":"incoming request"}
+{"level":30,"time":1771361463256,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-3","msg":"Route GET:/logs not found"}
+{"level":30,"time":1771361463257,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-3","res":{"statusCode":404},"responseTime":0.8849000000045635,"msg":"request completed"}
+{"level":30,"time":1771361465399,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-4","req":{"method":"GET","url":"/log","hostname":"localhost:3001","remoteAddress":"127.0.0.1","remotePort":53939},"msg":"incoming request"}
+{"level":30,"time":1771361465399,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-4","msg":"Route GET:/log not found"}
+{"level":30,"time":1771361465400,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-4","res":{"statusCode":404},"responseTime":1.0144000000145752,"msg":"request completed"}
+{"level":30,"time":1771361472250,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-5","req":{"method":"GET","url":"/log-ui","hostname":"localhost:3001","remoteAddress":"127.0.0.1","remotePort":53939},"msg":"incoming request"}
+{"level":30,"time":1771361472250,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-5","msg":"Route GET:/log-ui not found"}
+{"level":30,"time":1771361472251,"pid":13504,"hostname":"DESKTOP-L7C4B0U","reqId":"req-5","res":{"statusCode":404},"responseTime":0.7834999999904539,"msg":"request completed"}

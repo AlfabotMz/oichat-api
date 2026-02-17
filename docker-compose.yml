@@ -12,8 +12,25 @@ services:
       - PORT=3001
       # Overwrite PROJECT_BASEURL if valid in .env, otherwise default or set explicitly here
       - PROJECT_BASEURL=${PROJECT_BASEURL:-http://localhost:3001}
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     restart: always
     volumes:
       - .:/app
       - /app/node_modules
     command: [ "run", "--allow-net", "--allow-read", "--allow-env", "--allow-sys", "src/main.ts" ]
+
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: oichat-dozzle
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "9999:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 50M
+    restart: always

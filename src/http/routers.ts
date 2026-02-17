@@ -6,6 +6,7 @@ import { businessFormController } from "../controllers/businessFormController.ts
 import { paymentsController } from "../controllers/paymentsController.ts";
 import { profileController } from "../controllers/profileController.ts";
 import { onboardingController } from "../controllers/onboardingController.ts";
+import { logController } from "../controllers/logController.ts";
 
 // Função principal de roteamento que registra os controladores
 export default async function router(app: FastifyInstance) {
@@ -16,6 +17,8 @@ export default async function router(app: FastifyInstance) {
     app.register(paymentsController, { prefix: "/api/payments" })
     app.register(profileController, { prefix: "/api/profile" })
     app.register(onboardingController, { prefix: "/api/onboarding" })
+
+    app.register(logController, { prefix: "/api/admin" })
 
     app.get("/health", async (_request, reply) => {
         reply.status(200).send({
