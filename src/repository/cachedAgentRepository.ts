@@ -4,7 +4,7 @@ import { ID } from "../shared/types.ts";
 import { AgentRepository, AgentRespositoryImpl } from "./agentRepository.ts";
 
 const AGENT_PREFIX = "agent:";
-const CACHE_TTL_SECONDS = 3600; // Cache de 1 hora
+const CACHE_TTL_SECONDS = 1800; // Cache de 30 minutos
 
 // Um objeto simples para serialização, sem as classes customizadas.
 type StorableAgent = Omit<Agent, 'id' | 'userId' | 'createdAt' | 'updatedAt'> & {
