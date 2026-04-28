@@ -21,6 +21,10 @@ create table if not exists public.agents (
   tone text null,
   product_description text null,
   prompt_generated text null,
+  waba_id text null,
+  waba_phone_number_id text null,
+  waba_business_account_id text null,
+  waba_access_token text null,
   constraint agents_pkey primary key (id),
   constraint agents_instanceName_key unique ("instanceName")
 ) tablespace pg_default;

@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { agentController } from "../controllers/agentController.ts";
 import { webhookController } from "../controllers/webhookEvolutionController.ts";
+import { webhookWhatsappCloudController } from "../controllers/webhookWhatsappCloudController.ts";
 
 import { businessFormController } from "../controllers/businessFormController.ts";
 import { paymentsController } from "../controllers/paymentsController.ts";
@@ -12,6 +13,7 @@ import { logController } from "../controllers/logController.ts";
 export default async function router(app: FastifyInstance) {
     app.register(agentController, { prefix: "/api" })
     app.register(webhookController, { prefix: "/webhook" })
+    app.register(webhookWhatsappCloudController, { prefix: "/webhook-cloud" })
 
     app.register(businessFormController, { prefix: "/api/business-form" })
     app.register(paymentsController, { prefix: "/api/payments" })

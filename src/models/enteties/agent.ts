@@ -21,6 +21,10 @@ export const AgentSchema = z.object({
   messageDelay: z.number().nullable().optional().default(0),
   amount: z.string().nullable().optional(),
   customMessage: z.string().nullable().optional(),
+  wabaId: z.string().nullable().optional(),
+  wabaPhoneNumberId: z.string().nullable().optional(),
+  wabaBusinessAccountId: z.string().nullable().optional(),
+  wabaAccessToken: z.string().nullable().optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 })

@@ -40,6 +40,10 @@ export class AgentRespositoryImpl implements AgentRepository {
       messageDelay: raw.message_delay,
       amount: raw.amount,
       customMessage: raw.custom_message,
+      wabaId: raw.waba_id,
+      wabaPhoneNumberId: raw.waba_phone_number_id,
+      wabaBusinessAccountId: raw.waba_business_account_id,
+      wabaAccessToken: raw.waba_access_token,
       createdAt: new Date(raw.created_at),
       updatedAt: new Date(raw.updated_at),
     };
@@ -98,7 +102,11 @@ export class AgentRespositoryImpl implements AgentRepository {
       contactOwner: 'contact_owner',
       contactDelivery: 'contact_delivery',
       messageDelay: 'message_delay',
-      customMessage: 'custom_message'
+      customMessage: 'custom_message',
+      wabaId: 'waba_id',
+      wabaPhoneNumberId: 'waba_phone_number_id',
+      wabaBusinessAccountId: 'waba_business_account_id',
+      wabaAccessToken: 'waba_access_token'
     };
 
     for (const key in updateAgentData) {
