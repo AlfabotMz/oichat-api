@@ -41,157 +41,168 @@ export const webhookController = async (app: FastifyInstance) => {
         return reply.status(200).send({ message: "Ignore group" });
       }
 
-      const redis = getRedisClient();
-      const fromMeLockKey = `Timeout-IUser.${whatsapp.remoteJid}.${whatsapp.sender}`;
+      // Send OK immediately
+      reply.status(200).send({ ok: true });
 
-      // 2.2 fromMe Window logic
-      if (whatsapp.fromMe) {
-        await redis.set(fromMeLockKey, FROM_ME_WINDOW_MINUTES.toString(), {
-          EX: FROM_ME_WINDOW_MINUTES * 60
-        });
-        return reply.status(200).send({ message: "fromMe window set" });
-      }
+      // Async process
+      (async () => {
+        try {
+          const redis = getRedisClient();
+          const fromMeLockKey = `Timeout-IUser.${whatsapp.remoteJid}.${whatsapp.sender}`;
 
-      // Check if IA response window is active (ignore user messages after IA replied for a while)
-      const hasFromMeLock = await redis.get(fromMeLockKey);
-      if (hasFromMeLock) {
-        return reply.status(200).send({ message: "In fromMe window, ignoring user" });
-      }
+          // 2.2 fromMe Window logic
+          if (whatsapp.fromMe) {
+            await redis.set(fromMeLockKey, FROM_ME_WINDOW_MINUTES.toString(), {
+              EX: FROM_ME_WINDOW_MINUTES * 60
+            });
+            app.log.info("fromMe window set");
+            return;
+          }
 
-      // 3. Process Message type
-      let content = "";
-      const msg = whatsapp.message;
-      const langchainService = new LangchainService();
+          // Check if IA response window is active
+          const hasFromMeLock = await redis.get(fromMeLockKey);
+          if (hasFromMeLock) {
+            app.log.info("In fromMe window, ignoring user");
+            return;
+          }
 
-      if (whatsapp.messageType === "conversation") {
-        content = msg.conversation;
-      } else if (whatsapp.messageType === "extendedTextMessage") {
-        const quoted = msg.extendedTextMessage?.contextInfo?.quotedMessage?.conversation;
-        const text = msg.extendedTextMessage?.text;
-        content = quoted ? `Menção: ${quoted}\nResposta: ${text}` : text;
-      } else if (whatsapp.messageType === "editedMessage") {
-        content = msg.editedMessage?.message?.protocolMessage?.editedMessage?.conversation;
-      } else if (whatsapp.messageType === "audioMessage" && whatsapp.base64) {
-        content = await langchainService.transcribeAudio(whatsapp.base64);
-      } else if (whatsapp.messageType === "imageMessage" && whatsapp.base64) {
-        content = await langchainService.analyzeImage(whatsapp.base64);
-      }
+          // 3. Process Message type
+          let content = "";
+          const msg = whatsapp.message;
+          const langchainService = new LangchainService();
 
-      if (!content) return reply.status(200).send({ ok: true });
+          if (whatsapp.messageType === "conversation") {
+            content = msg.conversation;
+          } else if (whatsapp.messageType === "extendedTextMessage") {
+            const quoted = msg.extendedTextMessage?.contextInfo?.quotedMessage?.conversation;
+            const text = msg.extendedTextMessage?.text;
+            content = quoted ? `Menção: ${quoted}\nResposta: ${text}` : text;
+          } else if (whatsapp.messageType === "editedMessage") {
+            content = msg.editedMessage?.message?.protocolMessage?.editedMessage?.conversation;
+          } else if (whatsapp.messageType === "audioMessage" && whatsapp.base64) {
+            content = await langchainService.transcribeAudio(whatsapp.base64);
+          } else if (whatsapp.messageType === "imageMessage" && whatsapp.base64) {
+            content = await langchainService.analyzeImage(whatsapp.base64);
+          }
 
-      // 4. Grouping Mechanism (Redis Buffer)
-      const bufferKey = `Messages.${whatsapp.remoteJid}`;
-      const timeoutKey = `Timeout.${whatsapp.remoteJid}`;
+          if (!content) return;
 
-      await redis.rPush(bufferKey, content);
+          // 4. Grouping Mechanism (Redis Buffer)
+          const bufferKey = `Messages.${whatsapp.remoteJid}`;
+          const timeoutKey = `Timeout.${whatsapp.remoteJid}`;
 
-      const newTimeout = Date.now() + (TIMEOUT_SECONDS * 1000);
-      await redis.set(timeoutKey, newTimeout.toString(), { EX: 60 });
+          await redis.rPush(bufferKey, content);
 
-      // Wait for TIMEOUT
-      await new Promise(resolve => setTimeout(resolve, TIMEOUT_SECONDS * 1000));
+          const newTimeout = Date.now() + (TIMEOUT_SECONDS * 1000);
+          await redis.set(timeoutKey, newTimeout.toString(), { EX: 60 });
 
-      // Re-verify if this is the last message of the sequence
-      const savedTimeout = await redis.get(timeoutKey);
-      const now = Date.now();
-      console.log(`[Webhook] Timeout check: saved=${savedTimeout}, now=${now}`);
+          // Wait for TIMEOUT
+          await new Promise(resolve => setTimeout(resolve, TIMEOUT_SECONDS * 1000));
 
-      if (savedTimeout && parseInt(savedTimeout) > now) {
-        console.log("[Webhook] Gathering more messages (returning early)");
-        return reply.status(200).send({ message: "Gathering more messages..." });
-      }
+          // Re-verify if this is the last message of the sequence
+          const savedTimeout = await redis.get(timeoutKey);
+          const now = Date.now();
+          console.log(`[Webhook] Timeout check: saved=${savedTimeout}, now=${now}`);
 
-      // 5. Finalize grouping and process
-      const groupedMessages = await redis.lRange(bufferKey, 0, -1);
-      console.log(`[Webhook] Grouped messages: ${groupedMessages?.length || 0}`);
+          if (savedTimeout && parseInt(savedTimeout) > now) {
+            console.log("[Webhook] Gathering more messages (returning early)");
+            return;
+          }
 
-      await redis.del(bufferKey);
-      await redis.del(timeoutKey);
+          // 5. Finalize grouping and process
+          const groupedMessages = await redis.lRange(bufferKey, 0, -1);
+          console.log(`[Webhook] Grouped messages: ${groupedMessages?.length || 0}`);
 
-      if (!groupedMessages || groupedMessages.length === 0) {
-        console.log("[Webhook] No messages in buffer, returning");
-        return reply.status(200).send({ ok: true });
-      }
+          await redis.del(bufferKey);
+          await redis.del(timeoutKey);
 
-      const fullMessage = groupedMessages.join("\n");
+          if (!groupedMessages || groupedMessages.length === 0) {
+            console.log("[Webhook] No messages in buffer, returning");
+            return;
+          }
 
-      // 6. Execute Agent
-      const agent = await repository.findById(ID.from(agentId));
-      console.log(`[Webhook] Agent status: ${agent?.status}`);
+          const fullMessage = groupedMessages.join("\n");
 
-      if (!agent || (agent.status?.toLowerCase() === "inactive")) {
-        console.log("[Webhook] Agent inactive or not found");
-        return reply.status(200).send({ message: "Agent not found or inactive" });
-      }
+          // 6. Execute Agent
+          const agent = await repository.findById(ID.from(agentId));
+          console.log(`[Webhook] Agent status: ${agent?.status}`);
 
-      const conversationId = memoryService.generateConversationId(agent.id, whatsapp.remoteJid);
-      const history = await memoryService.getHistory(conversationId);
+          if (!agent || (agent.status?.toLowerCase() === "inactive")) {
+            console.log("[Webhook] Agent inactive or not found");
+            return;
+          }
 
-      const aiResponse = await langchainService.executeAgent({
-        agent,
-        messageHistory: history,
-        message: fullMessage,
-        whatsappContext: {
-          instanceName: whatsapp.instance,
-          remoteJid: whatsapp.remoteJid,
-          sender: whatsapp.sender
+          const conversationId = memoryService.generateConversationId(agent.id, whatsapp.remoteJid);
+          const history = await memoryService.getHistory(conversationId);
+
+          const aiResponse = await langchainService.executeAgent({
+            agent,
+            messageHistory: history,
+            message: fullMessage,
+            whatsappContext: {
+              instanceName: whatsapp.instance,
+              remoteJid: whatsapp.remoteJid,
+              sender: whatsapp.sender
+            }
+          });
+
+          console.log(`[Webhook] AI Response for ${whatsapp.remoteJid}: "${aiResponse}"`);
+
+          // 7. Save to History
+          await memoryService.addMessage(conversationId, {
+            id: new ID(`msg-${Date.now()}-user`),
+            content: fullMessage,
+            fromMe: false,
+            conversationId: agent.id
+          });
+          await memoryService.addMessage(conversationId, {
+            id: new ID(`msg-${Date.now()}-ai`),
+            content: aiResponse,
+            fromMe: true,
+            conversationId: agent.id
+          });
+
+          // 8. Delivery
+          const envKey = Deno.env.get("EVOLUTION_API_KEY");
+          const envUrl = Deno.env.get("EVOLUTION_API_URL");
+
+          if (!envKey || !envUrl) {
+            console.error("[Webhook] Missing Evolution API credentials");
+            return;
+          }
+
+          const evoService = new EvolutionApiService({
+            apiKey: envKey,
+            url: envUrl
+          });
+
+          const responseSegments = aiResponse.split("\n\n").filter(s => s.trim() !== "");
+          console.log(`[Webhook] Sending ${responseSegments.length} segments to ${whatsapp.instance}`);
+
+          for (const segment of responseSegments) {
+            const delay = segment.length * TIME_PER_CHAR;
+            console.log(`[Webhook] Segment delay: ${delay}ms`);
+            // Wait for simulated typing
+            await new Promise(resolve => setTimeout(resolve, delay));
+
+            const sendResult = await evoService.sendMessage({
+              instance: whatsapp.instance,
+              number: whatsapp.remoteJid,
+              message: segment,
+              presence: "composing",
+              delay: 0
+            });
+            console.log(`[Webhook] Send result:`, sendResult);
+          }
+
+        } catch (err) {
+          app.log.error(err, "Error in async webhook process");
         }
-      });
-
-      console.log(`[Webhook] AI Response for ${whatsapp.remoteJid}: "${aiResponse}"`);
-
-      // 7. Save to History
-      await memoryService.addMessage(conversationId, {
-        id: new ID(`msg-${Date.now()}-user`),
-        content: fullMessage,
-        fromMe: false,
-        conversationId: agent.id
-      });
-      await memoryService.addMessage(conversationId, {
-        id: new ID(`msg-${Date.now()}-ai`),
-        content: aiResponse,
-        fromMe: true,
-        conversationId: agent.id
-      });
-
-      // 8. Delivery
-      const envKey = Deno.env.get("EVOLUTION_API_KEY");
-      const envUrl = Deno.env.get("EVOLUTION_API_URL");
-
-      if (!envKey || !envUrl) {
-        console.error("[Webhook] Missing Evolution API credentials");
-        return reply.status(200).send({ error: "Missing API credentials" });
-      }
-
-      const evoService = new EvolutionApiService({
-        apiKey: envKey,
-        url: envUrl
-      });
-
-      const responseSegments = aiResponse.split("\n\n").filter(s => s.trim() !== "");
-      console.log(`[Webhook] Sending ${responseSegments.length} segments to ${whatsapp.instance}`);
-
-      for (const segment of responseSegments) {
-        const delay = segment.length * TIME_PER_CHAR;
-        console.log(`[Webhook] Segment delay: ${delay}ms`);
-        // Wait for simulated typing
-        await new Promise(resolve => setTimeout(resolve, delay));
-
-        const sendResult = await evoService.sendMessage({
-          instance: whatsapp.instance,
-          number: whatsapp.remoteJid,
-          message: segment,
-          presence: "composing",
-          delay: 0
-        });
-        console.log(`[Webhook] Send result:`, sendResult);
-      }
-
-      return reply.status(200).send({ success: true });
+      })().catch(err => app.log.error(err, "Error in evolution async IIFE"));
 
     } catch (err) {
       app.log.error(err, "Error in webhook process");
-      return reply.status(500).send({ error: (err as Error).message });
+      if (!reply.sent) return reply.status(500).send({ error: (err as Error).message });
     }
   });
 };
