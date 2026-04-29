@@ -275,24 +275,19 @@ export const agentController = async (app: FastifyInstance) => {
       body: {
         type: "object",
         properties: {
-          agent_id: { type: "string" },
           waba_id: { type: "string" },
           waba_business_account_id: { type: "string" },
           appsecret_proof: { type: "string" }
         },
-        required: ["agent_id", "waba_id", "waba_business_account_id", "appsecret_proof"]
+        required: ["waba_id", "waba_business_account_id", "appsecret_proof"]
       }
     },
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as any;
-    const { agent_id, waba_id, waba_business_account_id, appsecret_proof } = body;
+    const { waba_id, waba_business_account_id, appsecret_proof } = body;
 
     try {
-      app.log.info(`[connect-whatsapp-cloud] Iniciando fluxo p/ agente ${agent_id}`);
-      const agent = await repository.findById(ID.from(agent_id));
-      if (!agent) {
-        return reply.status(404).send({ success: false, message: "Agente não encontrado" });
-      }
+      app.log.info(`[connect-whatsapp-cloud] Iniciando fluxo p/ WABA ${waba_id}`);
 
       const systemUserToken = Deno.env.get("SYSTEM_USER_TOKEN");
       if (!systemUserToken) {
@@ -376,16 +371,6 @@ export const agentController = async (app: FastifyInstance) => {
         app.log.error(`[connect-whatsapp-cloud] Error in Step 7: ${err}`);
       }
 
-      // Update the Agent in the repository with the newly obtained details
-      await repository.update(agent.id, {
-        wabaId: waba_id,
-        wabaPhoneNumberId: phoneNumberId,
-        wabaBusinessAccountId: waba_business_account_id,
-        wabaAccessToken: businessToken,
-        phoneNumber: phoneNumberDisplay,
-        status: "active"
-      });
-
       // Optionally subscribe our webhook automatically
       try {
         const subscribeRes = await fetch(`https://graph.facebook.com/v22.0/${waba_id}/subscribed_apps`, {
@@ -401,9 +386,17 @@ export const agentController = async (app: FastifyInstance) => {
         app.log.warn(`[connect-whatsapp-cloud] Failed to subscribe apps automatically: ${err}`);
       }
 
+      // Return the final data payload back to the frontend!
       reply.status(200).send({
         success: true,
-        message: "Conectado com sucesso via Hosted Embedded Signup."
+        message: "Conectado com sucesso via Hosted Embedded Signup.",
+        data: {
+          wabaId: waba_id,
+          wabaBusinessAccountId: waba_business_account_id,
+          wabaPhoneNumberId: phoneNumberId,
+          wabaAccessToken: businessToken,
+          phoneNumber: phoneNumberDisplay
+        }
       });
 
     } catch (error) {
