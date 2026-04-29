@@ -267,6 +267,97 @@ export const agentController = async (app: FastifyInstance) => {
     }
   });
 
+  // --- WhatsApp Cloud API Connection (Embedded Signup) ---
+  app.post("/agents/connect-whatsapp-cloud", {
+    schema: {
+      summary: "Connect agent to WhatsApp Cloud API",
+      tags: ["Agent"],
+      body: {
+        type: "object",
+        properties: {
+          agent_id: { type: "string" },
+          waba_id: { type: "string" },
+          phone_number_id: { type: "string" },
+          waba_business_account_id: { type: "string" },
+          access_token: { type: "string" }
+        },
+        required: ["agent_id", "waba_id", "phone_number_id", "access_token"]
+      }
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as any;
+    const { agent_id, waba_id, phone_number_id, waba_business_account_id, access_token } = body;
+
+    try {
+      app.log.info(`[connect-whatsapp-cloud] Conectando agente ${agent_id} ao WhatsApp Cloud API`);
+      const agent = await repository.findById(ID.from(agent_id));
+      if (!agent) {
+        return reply.status(404).send({ success: false, message: "Agente não encontrado" });
+      }
+
+      // Update the Agent in the repository with the WhatsApp Cloud details
+      await repository.update(agent.id, {
+        wabaId: waba_id,
+        wabaPhoneNumberId: phone_number_id,
+        wabaBusinessAccountId: waba_business_account_id || "",
+        wabaAccessToken: access_token,
+        status: "active" // We can assume active here, or wait for account_update webhook. Given the prompt, let's keep it active.
+      });
+
+      // Optionally, we could subscribe the app to the WABA webhooks here 
+      // by making a POST request to graph.facebook.com/v22.0/{waba_id}/subscribed_apps
+      // using the SYSTEM_USER_TOKEN. We will attempt it if SYSTEM_USER_TOKEN is available.
+      const systemUserToken = Deno.env.get("SYSTEM_USER_TOKEN") || access_token;
+
+      try {
+        const subscribeRes = await fetch(`https://graph.facebook.com/v22.0/${waba_id}/subscribed_apps`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${systemUserToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        const subscribeData = await subscribeRes.json();
+        app.log.info(`[connect-whatsapp-cloud] Subscribed apps result: ${JSON.stringify(subscribeData)}`);
+      } catch (err) {
+        app.log.warn(`[connect-whatsapp-cloud] Failed to subscribe apps automatically: ${err}`);
+      }
+
+      // Step 3: Register the customer's phone number
+      try {
+        app.log.info(`[connect-whatsapp-cloud] Registering phone number ${phone_number_id}`);
+        const pin = Math.floor(100000 + Math.random() * 900000).toString(); // Secure 6 digit PIN
+        const registerRes = await fetch(`https://graph.facebook.com/v22.0/${phone_number_id}/register`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${access_token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            pin: pin
+          })
+        });
+        const registerData = await registerRes.json();
+        app.log.info(`[connect-whatsapp-cloud] Register phone result: ${JSON.stringify(registerData)}`);
+      } catch (err) {
+        app.log.error(`[connect-whatsapp-cloud] Failed to register phone number: ${err}`);
+      }
+
+      reply.status(200).send({
+        success: true,
+        message: "Conectado com sucesso ao WhatsApp Cloud API."
+      });
+
+    } catch (error) {
+      app.log.error(error, "[connect-whatsapp-cloud] Error in connect-whatsapp-cloud flow");
+      reply.status(500).send({
+        success: false,
+        message: `Erro interno: ${error}`
+      });
+    }
+  });
+
   // Update prompt endpoint
   app.post("/agents/update-prompt", {
     schema: {

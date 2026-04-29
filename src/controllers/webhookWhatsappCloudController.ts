@@ -37,7 +37,7 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
         return reply.status(400).send("Bad Request");
     });
 
-    // Incoming Messages
+    // Incoming Events
     app.post("/", async (request: FastifyRequest, reply: FastifyReply) => {
         const body = request.body as any;
 
@@ -47,6 +47,45 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
             }
 
             const value = body.entry[0].changes[0].value;
+            const field = body.entry[0].changes[0].field;
+
+            // ---- Handle Account Update Webhook (Embedded Signup) ----
+            if (field === "account_update") {
+                const wabaId = body.entry[0].id;
+                const event = value.event;
+                const phoneNumber = value.phone_number;
+
+                app.log.info(`[WhatsApp Cloud Webhook] account_update received for WABA ${wabaId}, event: ${event}`);
+
+                // If the account becomes verified or approved, we can set the agent as active
+                if (event === "VERIFIED_ACCOUNT" || event === "APPROVED" || event === "PARTNER_ADDED" || event === "APPROVED_UPDATE") {
+                    app.log.info(`[WhatsApp Cloud Webhook] Activating agent with WABA ID: ${wabaId}`);
+
+                    // Let's find the agent with this WABA ID and update its status
+                    const { data: agents, error: searchError } = await supabase
+                        .from("agents")
+                        .select("*")
+                        .eq("waba_id", wabaId);
+
+                    if (!searchError && agents && agents.length > 0) {
+                        for (const agent of agents) {
+                            if (agent.status !== "active") {
+                                await supabase
+                                    .from("agents")
+                                    .update({ status: "active" })
+                                    .eq("id", agent.id);
+                                app.log.info(`[WhatsApp Cloud Webhook] Agent ${agent.id} marked as active.`);
+                            }
+                        }
+                    } else {
+                        app.log.warn(`[WhatsApp Cloud Webhook] Agent with WABA ID ${wabaId} not found.`);
+                    }
+                }
+
+                return reply.status(200).send({ ok: true });
+            }
+
+            // ---- Handle Normal Messages ----
             const phoneNumberId = value.metadata?.phone_number_id;
 
             // Ensure it's a message event
