@@ -54,9 +54,13 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
             if (field === "account_update") {
                 const event = value.event;
 
+                // Debugging full payload
+                app.log.info(`[WhatsApp Cloud Webhook] FULL ENTRY: ${JSON.stringify(body.entry[0])}`);
+                app.log.info(`[WhatsApp Cloud Webhook] FULL VALUE: ${JSON.stringify(value)}`);
+
                 // Extração robusta de IDs
-                const wabaId = value.waba_id || value.waba_info?.waba_id;
                 const ownerBusinessId = value.owner_business_id || value.waba_info?.owner_business_id || body.entry[0].id;
+                const wabaId = value.waba_id || value.waba_info?.waba_id || (body.entry[0].id !== ownerBusinessId ? body.entry[0].id : undefined);
 
                 app.log.info(`[WhatsApp Cloud Webhook] account_update received. Event: ${event}, WABA: ${wabaId}, Owner: ${ownerBusinessId}`);
 
