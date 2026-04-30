@@ -190,7 +190,7 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
                         app.log.info("[WhatsApp Cloud Webhook] In fromMe window, ignoring user");
                         return;
                     }
-
+                    console.log("phoneNumberId", phoneNumberId)
                     const { data: agents, error } = await supabase
                         .from("agents")
                         .select("*")
