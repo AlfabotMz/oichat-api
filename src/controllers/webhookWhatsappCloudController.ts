@@ -53,19 +53,19 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
             // ---- Handle Account Update Webhook (Embedded Signup) ----
             if (field === "account_update") {
                 const event = value.event;
-                const wabaId = value.waba_id || body.entry[0].id; // Some payloads have waba_id in value
 
-                app.log.info(`[WhatsApp Cloud Webhook] account_update received for WABA ${wabaId}, event: ${event}`);
+                // Extração robusta de IDs
+                const wabaId = value.waba_id || value.waba_info?.waba_id;
+                const ownerBusinessId = value.owner_business_id || value.waba_info?.owner_business_id || body.entry[0].id;
+
+                app.log.info(`[WhatsApp Cloud Webhook] account_update received. Event: ${event}, WABA: ${wabaId}, Owner: ${ownerBusinessId}`);
 
                 // "Somente para adicionar o lead/cliente na app do facebook após o evento"
                 if (event === "PARTNER_ADDED" || event === "MM_LITE_TERMS_SIGNED") {
-                    app.log.info(`[WhatsApp Cloud Webhook] Partner Added! Iniciando inscrição automática do app no WABA ${wabaId}`);
+                    app.log.info(`[WhatsApp Cloud Webhook] Trigger detectado! Iniciando inscrição automática.`);
 
-                    // Extração dos IDs necessários
-                    const ownerBusinessId = value.owner_business_id || value.waba_info?.owner_business_id;
-
-                    if (!ownerBusinessId) {
-                        app.log.error("[WhatsApp Cloud Webhook] owner_business_id not found in webhook payload. Cannot proceed with automatic subscription.");
+                    if (!wabaId || !ownerBusinessId) {
+                        app.log.error("[WhatsApp Cloud Webhook] Missing IDs (WABA or Owner). Cannot proceed.");
                         return reply.status(200).send({ ok: true });
                     }
 
@@ -80,12 +80,15 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
                     // Process async to avoid webhook timeout
                     (async () => {
                         try {
+                            app.log.info(`[WhatsApp Cloud Webhook] Debug IDs - WABA: ${wabaId}, Owner: ${ownerBusinessId}`);
+
                             // Step 4: Generate appsecret_proof
                             const appsecretProof = createHmac('sha256', appSecret).update(systemUserToken).digest('hex');
 
                             // Step 5: Get Business Token 
-                            // (Docs: POST /<BUSINESS_PORTFOLIO_ID>/system_user_access_tokens)
-                            const tokenRes = await fetch(`https://graph.facebook.com/v21.0/${ownerBusinessId}/system_user_access_tokens`, {
+                            // (Docs: https://developers.facebook.com/docs/whatsapp/embedded-signup/hosted-es#system-user-access-tokens)
+                            const tokenUrl = `https://graph.facebook.com/v22.0/${ownerBusinessId}/system_user_access_tokens`;
+                            const tokenRes = await fetch(tokenUrl, {
                                 method: 'POST',
                                 headers: {
                                     'Authorization': `Bearer ${systemUserToken}`,
@@ -99,15 +102,16 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
 
                             const tokenData = await tokenRes.json();
                             if (!tokenRes.ok || !tokenData.access_token) {
-                                app.log.error(`[WhatsApp Cloud Webhook] Error fetching business token: ${JSON.stringify(tokenData)}`);
+                                app.log.error(`[WhatsApp Cloud Webhook] Step 5 Failed. Url: ${tokenUrl}, Error: ${JSON.stringify(tokenData)}`);
                                 return;
                             }
 
                             const businessToken = tokenData.access_token;
+                            app.log.info(`[WhatsApp Cloud Webhook] Token Comercial obtido com sucesso para o lead.`);
 
                             // Step 2: Subscribe App to WABA
-                            // Isso é o "adicionar o nosso aplicativo dentro do aplicativo"
-                            const subscribeRes = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/subscribed_apps`, {
+                            const subscribeUrl = `https://graph.facebook.com/v22.0/${wabaId}/subscribed_apps`;
+                            const subscribeRes = await fetch(subscribeUrl, {
                                 method: 'POST',
                                 headers: {
                                     'Authorization': `Bearer ${businessToken}`,
@@ -119,7 +123,7 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
                             if (subscribeRes.ok) {
                                 app.log.info(`[WhatsApp Cloud Webhook] App inscrito com sucesso na WABA ${wabaId}!`);
                             } else {
-                                app.log.error(`[WhatsApp Cloud Webhook] Falha ao inscrever app na WABA: ${JSON.stringify(subscribeData)}`);
+                                app.log.error(`[WhatsApp Cloud Webhook] Step 2 Failed (Subscribed Apps). Url: ${subscribeUrl}, Error: ${JSON.stringify(subscribeData)}`);
                             }
 
                         } catch (err) {
