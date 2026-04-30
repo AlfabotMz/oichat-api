@@ -7,6 +7,7 @@ import { getRedisClient } from "../db/redisClient.ts";
 import { RedisConversationMemory } from "../services/conversationMemoryService.ts";
 import { CachedAgentRepository } from "../repository/cachedAgentRepository.ts";
 import { AgentRespositoryImpl } from "../repository/agentRepository.ts";
+import { createHmac } from "node:crypto";
 
 const TIMEOUT_SECONDS = 12;
 const FROM_ME_WINDOW_MINUTES = 120;
@@ -51,34 +52,94 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
 
             // ---- Handle Account Update Webhook (Embedded Signup) ----
             if (field === "account_update") {
-                const wabaId = body.entry[0].id;
                 const event = value.event;
-                const phoneNumber = value.phone_number;
+                const wabaId = value.waba_id || body.entry[0].id; // Some payloads have waba_id in value
 
                 app.log.info(`[WhatsApp Cloud Webhook] account_update received for WABA ${wabaId}, event: ${event}`);
 
-                // If the account becomes verified or approved, we can set the agent as active
-                if (event === "VERIFIED_ACCOUNT" || event === "APPROVED" || event === "PARTNER_ADDED" || event === "APPROVED_UPDATE") {
-                    app.log.info(`[WhatsApp Cloud Webhook] Activating agent with WABA ID: ${wabaId}`);
+                // "Somente para adicionar o lead/cliente na app do facebook após o evento"
+                if (event === "PARTNER_ADDED") {
+                    app.log.info(`[WhatsApp Cloud Webhook] Partner Added! Iniciando inscrição automática do app no WABA ${wabaId}`);
 
-                    // Let's find the agent with this WABA ID and update its status
-                    const { data: agents, error: searchError } = await supabase
+                    // Extração dos IDs necessários
+                    const ownerBusinessId = value.owner_business_id || value.waba_info?.owner_business_id;
+
+                    if (!ownerBusinessId) {
+                        app.log.error("[WhatsApp Cloud Webhook] owner_business_id not found in webhook payload. Cannot proceed with automatic subscription.");
+                        return reply.status(200).send({ ok: true });
+                    }
+
+                    const systemUserToken = Deno.env.get("SYSTEM_USER_TOKEN");
+                    const appSecret = Deno.env.get("APP_SECRET");
+
+                    if (!systemUserToken || !appSecret) {
+                        app.log.error("[WhatsApp Cloud Webhook] Missing SYSTEM_USER_TOKEN or APP_SECRET in environment.");
+                        return reply.status(200).send({ ok: true });
+                    }
+
+                    // Process async to avoid webhook timeout
+                    (async () => {
+                        try {
+                            // Step 4: Generate appsecret_proof
+                            const appsecretProof = createHmac('sha256', appSecret).update(systemUserToken).digest('hex');
+
+                            // Step 5: Get Business Token 
+                            // (Docs: POST /<BUSINESS_PORTFOLIO_ID>/system_user_access_tokens)
+                            const tokenRes = await fetch(`https://graph.facebook.com/v21.0/${ownerBusinessId}/system_user_access_tokens`, {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': `Bearer ${systemUserToken}`,
+                                    'Content-Type': 'application/x-www-form-urlencoded'
+                                },
+                                body: new URLSearchParams({
+                                    appsecret_proof: appsecretProof,
+                                    fetch_only: 'true'
+                                })
+                            });
+
+                            const tokenData = await tokenRes.json();
+                            if (!tokenRes.ok || !tokenData.access_token) {
+                                app.log.error(`[WhatsApp Cloud Webhook] Error fetching business token: ${JSON.stringify(tokenData)}`);
+                                return;
+                            }
+
+                            const businessToken = tokenData.access_token;
+
+                            // Step 2: Subscribe App to WABA
+                            // Isso é o "adicionar o nosso aplicativo dentro do aplicativo"
+                            const subscribeRes = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/subscribed_apps`, {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': `Bearer ${businessToken}`,
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+
+                            const subscribeData = await subscribeRes.json();
+                            if (subscribeRes.ok) {
+                                app.log.info(`[WhatsApp Cloud Webhook] App inscrito com sucesso na WABA ${wabaId}!`);
+                            } else {
+                                app.log.error(`[WhatsApp Cloud Webhook] Falha ao inscrever app na WABA: ${JSON.stringify(subscribeData)}`);
+                            }
+
+                        } catch (err) {
+                            app.log.error(err, "[WhatsApp Cloud Webhook] Error during automated background subscription");
+                        }
+                    })();
+                } else if (event === "VERIFIED_ACCOUNT" || event === "APPROVED") {
+                    // Outros eventos ainda podem ativar o agente se ele já existir
+                    const { data: agents } = await supabase
                         .from("agents")
                         .select("*")
                         .eq("waba_id", wabaId);
 
-                    if (!searchError && agents && agents.length > 0) {
+                    if (agents && agents.length > 0) {
                         for (const agent of agents) {
                             if (agent.status !== "active") {
-                                await supabase
-                                    .from("agents")
-                                    .update({ status: "active" })
-                                    .eq("id", agent.id);
-                                app.log.info(`[WhatsApp Cloud Webhook] Agent ${agent.id} marked as active.`);
+                                await supabase.from("agents").update({ status: "active" }).eq("id", agent.id);
+                                app.log.info(`[WhatsApp Cloud Webhook] Agent ${agent.id} ativado via event ${event}.`);
                             }
                         }
-                    } else {
-                        app.log.warn(`[WhatsApp Cloud Webhook] Agent with WABA ID ${wabaId} not found.`);
                     }
                 }
 
