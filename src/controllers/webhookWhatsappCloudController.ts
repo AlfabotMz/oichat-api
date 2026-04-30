@@ -58,7 +58,7 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
                 app.log.info(`[WhatsApp Cloud Webhook] account_update received for WABA ${wabaId}, event: ${event}`);
 
                 // "Somente para adicionar o lead/cliente na app do facebook após o evento"
-                if (event === "PARTNER_ADDED") {
+                if (event === "PARTNER_ADDED" || event === "MM_LITE_TERMS_SIGNED") {
                     app.log.info(`[WhatsApp Cloud Webhook] Partner Added! Iniciando inscrição automática do app no WABA ${wabaId}`);
 
                     // Extração dos IDs necessários
