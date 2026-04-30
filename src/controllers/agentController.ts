@@ -295,15 +295,15 @@ export const agentController = async (app: FastifyInstance) => {
         return reply.status(500).send({ success: false, message: "Server misconfiguration. Missing Meta System Token." });
       }
 
-      // Step 5: Get a business token
+      // Step 1/5: Get/Exchange for a business token
       let businessToken = "";
       try {
-        app.log.info(`[connect-whatsapp-cloud] Step 5: Buscando Business Token...`);
+        app.log.info(`[connect-whatsapp-cloud] Passo 1/5: Obtendo Business Token...`);
         const params = new URLSearchParams();
         params.append("appsecret_proof", appsecret_proof);
         params.append("fetch_only", "true");
 
-        const tokenRes = await fetch(`https://graph.facebook.com/v22.0/${waba_business_account_id}/system_user_access_tokens`, {
+        const tokenRes = await fetch(`https://graph.facebook.com/v21.0/${waba_business_account_id}/system_user_access_tokens`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${systemUserToken}`,
@@ -314,21 +314,21 @@ export const agentController = async (app: FastifyInstance) => {
 
         const tokenData = await tokenRes.json();
         if (!tokenRes.ok || !tokenData.access_token) {
-          app.log.error(`[connect-whatsapp-cloud] Error in Step 5: ${JSON.stringify(tokenData)}`);
-          return reply.status(400).send({ success: false, message: "Falha ao obter Token Comercial (Step 5)." });
+          app.log.error(`[connect-whatsapp-cloud] Error obtaining token: ${JSON.stringify(tokenData)}`);
+          return reply.status(400).send({ success: false, message: "Falha ao obter Token Comercial da Meta." });
         }
         businessToken = tokenData.access_token;
       } catch (err) {
-        app.log.error(`[connect-whatsapp-cloud] Error in Step 5 (Request): ${err}`);
-        return reply.status(500).send({ success: false, message: "Erro de rede no Passo 5" });
+        app.log.error(`[connect-whatsapp-cloud] Network error in Step 1/5: ${err}`);
+        return reply.status(500).send({ success: false, message: "Erro de comunicação com a Meta." });
       }
 
-      // Step 6: Get the customer's business phone number ID
+      // Step 6: Get Phone Number ID
       let phoneNumberId = "";
       let phoneNumberDisplay = "";
       try {
-        app.log.info(`[connect-whatsapp-cloud] Step 6: Buscando Phone Number ID...`);
-        const phoneRes = await fetch(`https://graph.facebook.com/v22.0/${waba_id}/phone_numbers`, {
+        app.log.info(`[connect-whatsapp-cloud] Passo 6: Buscando ID do Telefone...`);
+        const phoneRes = await fetch(`https://graph.facebook.com/v21.0/${waba_id}/phone_numbers`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${businessToken}`
@@ -337,24 +337,41 @@ export const agentController = async (app: FastifyInstance) => {
 
         const phoneData = await phoneRes.json();
         if (!phoneRes.ok || !phoneData.data || phoneData.data.length === 0) {
-          app.log.error(`[connect-whatsapp-cloud] Error in Step 6: ${JSON.stringify(phoneData)}`);
-          return reply.status(400).send({ success: false, message: "Não foi possível encontrar números (Step 6)." });
+          app.log.error(`[connect-whatsapp-cloud] Error fetching phone list: ${JSON.stringify(phoneData)}`);
+          return reply.status(400).send({ success: false, message: "Número de telefone não encontrado na WABA." });
         }
 
         const phoneEntry = phoneData.data[0];
         phoneNumberId = phoneEntry.id;
         phoneNumberDisplay = phoneEntry.display_phone_number;
       } catch (err) {
-        app.log.error(`[connect-whatsapp-cloud] Error in Step 6 (Request): ${err}`);
-        return reply.status(500).send({ success: false, message: "Erro de rede no Passo 6" });
+        app.log.error(`[connect-whatsapp-cloud] Network error in Step 6: ${err}`);
+        return reply.status(500).send({ success: false, message: "Erro ao buscar dados do telefone." });
       }
 
-      // Step 7: Onboard the customer (Register the phone number)
+      // Step 2 (Tech Provider): Subscribe our App to the customer's WABA
+      // This is the core requested step: "Add our app inside their app for webhooks"
       try {
-        app.log.info(`[connect-whatsapp-cloud] Step 7: Registrando Phone Number...`);
-        const pin = Math.floor(100000 + Math.random() * 900000).toString(); // Secure 6 digit PIN
+        app.log.info(`[connect-whatsapp-cloud] Passo 2: Inscrevendo nosso App na WABA ${waba_id}...`);
+        const subscribeRes = await fetch(`https://graph.facebook.com/v21.0/${waba_id}/subscribed_apps`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${businessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        const subscribeData = await subscribeRes.json();
+        app.log.info(`[connect-whatsapp-cloud] Subscribed apps result: ${JSON.stringify(subscribeData)}`);
+      } catch (err) {
+        app.log.error(`[connect-whatsapp-cloud] Failed to subscribe app: ${err}`);
+      }
 
-        const registerRes = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}/register`, {
+      // Step 3/7 (Tech Provider): Final Onboard (Register Phone)
+      try {
+        app.log.info(`[connect-whatsapp-cloud] Passo 3/7: Registrando número ${phoneNumberId}...`);
+        const pin = Math.floor(100000 + Math.random() * 900000).toString();
+
+        await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/register`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${businessToken}`,
@@ -365,31 +382,13 @@ export const agentController = async (app: FastifyInstance) => {
             pin: pin
           })
         });
-        const registerData = await registerRes.json();
-        app.log.info(`[connect-whatsapp-cloud] Register result: ${JSON.stringify(registerData)}`);
       } catch (err) {
-        app.log.error(`[connect-whatsapp-cloud] Error in Step 7: ${err}`);
+        app.log.error(`[connect-whatsapp-cloud] Failed to register phone: ${err}`);
       }
 
-      // Optionally subscribe our webhook automatically
-      try {
-        const subscribeRes = await fetch(`https://graph.facebook.com/v22.0/${waba_id}/subscribed_apps`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${systemUserToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        const subscribeData = await subscribeRes.json();
-        app.log.info(`[connect-whatsapp-cloud] Subscribed apps result: ${JSON.stringify(subscribeData)}`);
-      } catch (err) {
-        app.log.warn(`[connect-whatsapp-cloud] Failed to subscribe apps automatically: ${err}`);
-      }
-
-      // Return the final data payload back to the frontend!
       reply.status(200).send({
         success: true,
-        message: "Conectado com sucesso via Hosted Embedded Signup.",
+        message: "Conexão de Tech Provider finalizada com sucesso.",
         data: {
           wabaId: waba_id,
           wabaBusinessAccountId: waba_business_account_id,
