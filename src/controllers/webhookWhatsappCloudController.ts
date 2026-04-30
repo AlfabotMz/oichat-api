@@ -196,7 +196,6 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
                         .select("*")
                         .eq("waba_phone_number_id", phoneNumberId);
 
-                    console.log("agents", agents)
 
                     if (error || !agents || agents.length === 0) {
                         app.log.warn(`[WhatsApp Cloud Webhook] Agent not found for phone_number_id: ${phoneNumberId}`);
