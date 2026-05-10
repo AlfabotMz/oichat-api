@@ -114,16 +114,17 @@ export class ConversionService {
         }
 
         // 6. Send notification to Frontend
-        await this.sendFrontendNotification(date, agent?.name || "Agente", message);
+        await this.sendFrontendNotification(date, agent_id, message, whatsapp_number);
 
         // 7. Save redis flag (48h)
         await redis.set(redisKey, "true", { EX: 172800 });
     }
 
-    private async sendFrontendNotification(date: string, agentName: string, textFormulario: string) {
+    private async sendFrontendNotification(date: string, agentId: string, textFormulario: string, userNumber: string) {
         const payload = {
             date,
-            agent: agentName,
+            agentId,
+            userNumber,
             form: textFormulario
         };
 
