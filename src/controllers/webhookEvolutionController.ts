@@ -66,6 +66,13 @@ export const webhookController = async (app: FastifyInstance) => {
             return;
           }
 
+          const concludedKey = `LeadConcluded.${whatsapp.instance}.${whatsapp.remoteJid}`;
+          const isConcluded = await redis.get(concludedKey);
+          if (isConcluded) {
+            app.log.info("Lead is concluded, ignoring user");
+            return;
+          }
+
           // 3. Process Message type
           let content = "";
           const msg = whatsapp.message;

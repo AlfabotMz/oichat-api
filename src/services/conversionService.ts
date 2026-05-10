@@ -113,8 +113,35 @@ export class ConversionService {
             });
         }
 
-        // 6. Save redis flag (48h)
+        // 6. Send notification to Frontend
+        await this.sendFrontendNotification(date, agent?.name || "Agente", message);
+
+        // 7. Save redis flag (48h)
         await redis.set(redisKey, "true", { EX: 172800 });
+    }
+
+    private async sendFrontendNotification(date: string, agentName: string, textFormulario: string) {
+        const payload = {
+            date,
+            agent: agentName,
+            form: textFormulario
+        };
+
+        const webhookUrl = Deno.env.get("FRONTEND_NOTIFICATION_WEBHOOK_URL");
+        if (webhookUrl) {
+            try {
+                await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                console.log(`[Notification] Frontend webhook sent successfully.`);
+            } catch (err) {
+                console.error(`[Notification] Failed to send frontend webhook:`, err);
+            }
+        } else {
+            console.log(`[Notification] Simulated sending to Frontend (URL not set):`, JSON.stringify(payload));
+        }
     }
 
     private buildMessage(template: string, vars: ConversionData): string {

@@ -7,6 +7,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { ConversionService } from "./conversionService.ts";
 import { supabase } from "../db/supabaseClient.ts";
+import { getRedisClient } from "../db/redisClient.ts";
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 // Prompt system do agente de atendimento da oichat
@@ -148,7 +149,24 @@ export class LangchainService {
             }
         );
 
-        const tools = [sendConversationTool];
+        const concludeLeadTool = tool(
+            async (input) => {
+                if (whatsappContext) {
+                    const redis = getRedisClient();
+                    const concludedKey = `LeadConcluded.${whatsappContext.instanceName}.${whatsappContext.remoteJid}`;
+                    await redis.set(concludedKey, "true");
+                    return "Lead concluído com sucesso. O assistente deixará de responder daqui pra frente.";
+                }
+                return "Erro: Contexto do WhatsApp ausente.";
+            },
+            {
+                name: "conclude_lead",
+                description: "Marca o lead como concluído/finalizado, garantindo que o assistente pare de enviar mensagens automáticas para este número. Chame esta função ao considerar o atendimento totalmente concluído.",
+                schema: z.object({}),
+            }
+        );
+
+        const tools = [sendConversationTool, concludeLeadTool];
         const modelWithTools = this.model.bindTools(tools);
 
         // 2. Format Messages
@@ -178,6 +196,8 @@ export class LangchainService {
             for (const toolCall of result.tool_calls) {
                 if (toolCall.name === "send_conversation") {
                     await sendConversationTool.call(toolCall.args);
+                } else if (toolCall.name === "conclude_lead") {
+                    await concludeLeadTool.call(toolCall.args);
                 }
             }
             // Return a confirmation if a tool was called, or re-run model

@@ -210,6 +210,13 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
                         return;
                     }
 
+                    const concludedKey = `LeadConcluded.${agent.id.toString()}.${whatsapp.remoteJid}`;
+                    const isConcluded = await redis.get(concludedKey);
+                    if (isConcluded) {
+                        app.log.info("[WhatsApp Cloud Webhook] Lead is concluded, ignoring user");
+                        return;
+                    }
+
                     if (!agentData.waba_access_token) {
                         app.log.error(`[WhatsApp Cloud Webhook] Agent found but missing waba_access_token`);
                         return;
@@ -292,12 +299,31 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
                         const delay = segment.length * TIME_PER_CHAR;
                         await new Promise(resolve => setTimeout(resolve, delay));
 
-                        await cloudService.sendMessage({
-                            phoneNumberId: phoneNumberId,
-                            accessToken: agentData.waba_access_token,
-                            number: whatsapp.remoteJid,
-                            message: segment
-                        });
+                        const textSegment = segment.trim();
+                        const isUrl = textSegment.startsWith("https://") || textSegment.startsWith("http://");
+                        const extMatch = textSegment.match(/\.(jpeg|jpg|png|webp|gif|mp4|mov|pdf)$/i);
+
+                        if (isUrl && extMatch) {
+                            const ext = extMatch[1].toLowerCase();
+                            let mediaType: "image" | "video" | "document" | "audio" = "image";
+                            if (ext === "mp4" || ext === "mov") mediaType = "video";
+                            else if (ext === "pdf") mediaType = "document";
+
+                            await cloudService.sendMedia({
+                                phoneNumberId: phoneNumberId,
+                                accessToken: agentData.waba_access_token,
+                                number: whatsapp.remoteJid,
+                                mediaUrl: textSegment,
+                                mediatype: mediaType
+                            });
+                        } else {
+                            await cloudService.sendMessage({
+                                phoneNumberId: phoneNumberId,
+                                accessToken: agentData.waba_access_token,
+                                number: whatsapp.remoteJid,
+                                message: segment
+                            });
+                        }
                     }
 
                 } catch (err) {
