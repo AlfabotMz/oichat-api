@@ -97,7 +97,7 @@ export class LangchainService {
     // Inicialização da classe de serviço do langchain
     constructor() {
         this.model = new ChatOpenAI({
-            modelName: Deno.env.get("MODEL_NAME") || "openai/o4-mini",
+            modelName: Deno.env.get("MODEL_NAME") || "openai/gpt-5-nano",
             openAIApiKey: Deno.env.get("OPENROUTER_API_KEY"),
             configuration: {
                 baseURL: Deno.env.get("OPENROUTER_API_BASE") || "https://openrouter.ai/api/v1",

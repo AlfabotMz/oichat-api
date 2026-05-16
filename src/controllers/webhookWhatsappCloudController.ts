@@ -166,9 +166,14 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
             const from = msg.from; // Sender number
             const messageType = msg.type;
 
+            let remoteJidStr = from;
+            if (!remoteJidStr.includes("@s.whatsapp.net") && !remoteJidStr.includes("@g.us")) {
+                remoteJidStr = `${remoteJidStr}@s.whatsapp.net`;
+            }
+
             const whatsapp = {
-                remoteJid: from,
-                sender: from,
+                remoteJid: remoteJidStr,
+                sender: remoteJidStr,
                 messageType: messageType,
                 text: msg.text?.body,
                 fromMe: false // WhatsApp Cloud API sends statuses for fromMe messages, so usually the POST body.messages are not fromMe

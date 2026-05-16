@@ -23,10 +23,15 @@ export const webhookController = async (app: FastifyInstance) => {
 
     try {
       // 1. Normalization
+      let remoteJidStr = body.data?.key?.remoteJid;
+      if (remoteJidStr && !remoteJidStr.includes("@s.whatsapp.net") && !remoteJidStr.includes("@g.us")) {
+        remoteJidStr = `${remoteJidStr}@s.whatsapp.net`;
+      }
+
       const whatsapp = {
-        instance: body.instance || body.instanceName,
-        remoteJid: body.data?.key?.remoteJid,
-        sender: body.data?.key?.participant || body.data?.key?.remoteJid,
+        instance: agentId,
+        remoteJid: remoteJidStr,
+        sender: body.data?.key?.participant || remoteJidStr,
         fromMe: body.data?.key?.fromMe || false,
         messageType: body.data?.messageType,
         message: body.data?.message,

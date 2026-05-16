@@ -121,10 +121,11 @@ export class ConversionService {
     }
 
     private async sendFrontendNotification(date: string, agentId: string, textFormulario: string, userNumber: string) {
+        const cleanUserNumber = userNumber.split("@")[0];
         const payload = {
             date,
             agentId,
-            userNumber,
+            userNumber: cleanUserNumber,
             form: textFormulario
         };
 
