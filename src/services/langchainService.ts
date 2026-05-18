@@ -195,9 +195,9 @@ export class LangchainService {
         if (result.tool_calls && result.tool_calls.length > 0) {
             for (const toolCall of result.tool_calls) {
                 if (toolCall.name === "send_conversation") {
-                    await sendConversationTool.call(toolCall.args);
+                    await sendConversationTool.invoke(toolCall.args);
                 } else if (toolCall.name === "conclude_lead") {
-                    await concludeLeadTool.call(toolCall.args);
+                    await concludeLeadTool.invoke(toolCall.args);
                 }
             }
             // Return a confirmation if a tool was called, or re-run model

@@ -24,7 +24,7 @@ export const agentController = async (app: FastifyInstance) => {
   // n8n compatible endpoint
   app.post("/agents/create-agent", {
     schema: {
-      summary: 'Criar um novo agente (n8n compatível)',
+      summary: 'Criar um novo agente (n8n compatível) [DEPRECATED]',
       tags: ['Agente'],
     },
   }, async (request: FastifyRequest, reply: FastifyReply) => {
@@ -96,7 +96,7 @@ export const agentController = async (app: FastifyInstance) => {
   // n8n compatible delete endpoint
   app.post("/agents/delete-agent", {
     schema: {
-      summary: 'Deletar um agente (n8n compatível)',
+      summary: 'Deletar um agente (n8n compatível) [DEPRECATED]',
       tags: ['Agente'],
     },
   }, async (request: FastifyRequest, reply: FastifyReply) => {
@@ -168,7 +168,7 @@ export const agentController = async (app: FastifyInstance) => {
 
   app.post("/agents/connect-whatsapp", {
     schema: {
-      summary: "Connect agent to WhatsApp (n8n compatible)",
+      summary: "Connect agent to WhatsApp (n8n compatible) [DEPRECATED]",
       tags: ["Agent"],
     },
   }, async (request, reply) => {
@@ -457,7 +457,7 @@ export const agentController = async (app: FastifyInstance) => {
   // n8n compatible check-status endpoint
   app.post("/agents/check-status", {
     schema: {
-      summary: "Check agent connection status (n8n compatible)",
+      summary: "Check agent connection status (n8n compatible) [DEPRECATED]",
       tags: ["Agent"],
     },
   }, async (request, reply) => {

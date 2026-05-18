@@ -13,6 +13,10 @@ const TIMEOUT_SECONDS = 12;
 const FROM_ME_WINDOW_MINUTES = 120;
 const TIME_PER_CHAR = 15;
 
+/**
+ * @deprecated The Evolution API integration has been deprecated. 
+ * Use WhatsApp Cloud API instead.
+ */
 export const webhookController = async (app: FastifyInstance) => {
   const repository = new CachedAgentRepository(new AgentRespositoryImpl(supabase));
   const memoryService = new RedisConversationMemory();

@@ -159,6 +159,34 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
 
             // Ensure it's a message event
             if (!value.messages || !value.messages[0]) {
+                // Handle statuses for human reply detection
+                if (value.statuses && value.statuses[0]) {
+                    const statusObj = value.statuses[0];
+                    if (statusObj.status === "sent") {
+                        const wamid = statusObj.id; // Corrected to just id based on standard WABA webhook payload
+                        const remoteJid = statusObj.recipient_id;
+                        const sender = statusObj.recipient_id; // in WABA, sent statuses just have recipient
+
+                        if (wamid && remoteJid) {
+                            // Process async so we don't break the return flow
+                            (async () => {
+                                try {
+                                    const redis = getRedisClient();
+                                    const isAiMessage = await redis.get(`wamid:${wamid}`);
+
+                                    if (!isAiMessage) {
+                                        // If AI didn't send it, but we got a 'sent' status, it's the human owner
+                                        const fromMeLockKey = `Timeout-IUser.${remoteJid}.${sender}`;
+                                        await redis.set(fromMeLockKey, "true", { EX: FROM_ME_WINDOW_MINUTES * 60 });
+                                        app.log.info(`[WhatsApp Cloud Webhook] Human reply detected! Locked AI for ${FROM_ME_WINDOW_MINUTES} minutes.`);
+                                    }
+                                } catch (err) {
+                                    app.log.error(err, "Failed to check human sent status");
+                                }
+                            })();
+                        }
+                    }
+                }
                 return reply.status(200).send({ ok: true });
             }
 
@@ -166,14 +194,9 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
             const from = msg.from; // Sender number
             const messageType = msg.type;
 
-            let remoteJidStr = from;
-            if (!remoteJidStr.includes("@s.whatsapp.net") && !remoteJidStr.includes("@g.us")) {
-                remoteJidStr = `${remoteJidStr}@s.whatsapp.net`;
-            }
-
             const whatsapp = {
-                remoteJid: remoteJidStr,
-                sender: remoteJidStr,
+                remoteJid: from,
+                sender: from,
                 messageType: messageType,
                 text: msg.text?.body,
                 fromMe: false // WhatsApp Cloud API sends statuses for fromMe messages, so usually the POST body.messages are not fromMe
@@ -305,29 +328,44 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
                         await new Promise(resolve => setTimeout(resolve, delay));
 
                         const textSegment = segment.trim();
-                        const isUrl = textSegment.startsWith("https://") || textSegment.startsWith("http://");
-                        const extMatch = textSegment.match(/\.(jpeg|jpg|png|webp|gif|mp4|mov|pdf)$/i);
 
-                        if (isUrl && extMatch) {
-                            const ext = extMatch[1].toLowerCase();
+                        const urlRegex = /(https?:\/\/[^\s]+?\.(jpeg|jpg|png|webp|gif|mp4|mov|pdf))/i;
+                        const match = textSegment.match(urlRegex);
+
+                        if (match) {
+                            const mediaUrl = match[1];
+                            const ext = match[2].toLowerCase();
+
+                            let caption = textSegment.replace(mediaUrl, '').trim();
+                            caption = caption.replace(/!\[.*?\]\(\)/g, '').replace(/\[.*?\]\(\)/g, '').trim();
+
                             let mediaType: "image" | "video" | "document" | "audio" = "image";
                             if (ext === "mp4" || ext === "mov") mediaType = "video";
                             else if (ext === "pdf") mediaType = "document";
 
-                            await cloudService.sendMedia({
+                            const sendRes = await cloudService.sendMedia({
                                 phoneNumberId: phoneNumberId,
                                 accessToken: agentData.waba_access_token,
                                 number: whatsapp.remoteJid,
-                                mediaUrl: textSegment,
-                                mediatype: mediaType
+                                mediaUrl: mediaUrl,
+                                mediatype: mediaType,
+                                caption: caption || undefined
                             });
+
+                            if (sendRes?.messages?.[0]?.id) {
+                                await redis.set(`wamid:${sendRes.messages[0].id}`, "ai", { EX: 300 });
+                            }
                         } else {
-                            await cloudService.sendMessage({
+                            const sendRes = await cloudService.sendMessage({
                                 phoneNumberId: phoneNumberId,
                                 accessToken: agentData.waba_access_token,
                                 number: whatsapp.remoteJid,
                                 message: segment
                             });
+
+                            if (sendRes?.messages?.[0]?.id) {
+                                await redis.set(`wamid:${sendRes.messages[0].id}`, "ai", { EX: 300 });
+                            }
                         }
                     }
 
