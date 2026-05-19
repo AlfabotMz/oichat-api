@@ -82,6 +82,13 @@ export const webhookController = async (app: FastifyInstance) => {
             return;
           }
 
+          const convertedKey = `Converted.${whatsapp.instance}.${whatsapp.remoteJid}`;
+          const isConverted = await redis.get(convertedKey);
+          if (isConverted) {
+            app.log.info("Order is already confirmed (converted), ignoring user");
+            return;
+          }
+
           // 3. Process Message type
           let content = "";
           const msg = whatsapp.message;
@@ -137,22 +144,41 @@ export const webhookController = async (app: FastifyInstance) => {
             return;
           }
 
-          const fullMessage = groupedMessages.join("\n");
-
-          // 6. Execute Agent
-          const agent = await repository.findById(ID.from(agentId));
-          console.log(`[Webhook] Agent status: ${agent?.status}`);
-
-          if (!agent || (agent.status?.toLowerCase() === "inactive")) {
-            console.log("[Webhook] Agent inactive or not found");
+          // --- RE-VERIFY LOCKS AND AGENT STATUS AFTER DELAY ---
+          const freshFromMeLock = await redis.get(fromMeLockKey);
+          if (freshFromMeLock) {
+            app.log.info("[Webhook] In fromMe window after delay, ignoring user");
             return;
           }
 
-          const conversationId = memoryService.generateConversationId(agent.id, whatsapp.remoteJid);
+          const freshConcluded = await redis.get(concludedKey);
+          if (freshConcluded) {
+            app.log.info("[Webhook] Lead concluded during delay, ignoring user");
+            return;
+          }
+
+          const freshConverted = await redis.get(convertedKey);
+          if (freshConverted) {
+            app.log.info("[Webhook] Order confirmed during delay, ignoring user");
+            return;
+          }
+
+          // 6. Execute Agent
+          const dbRepository = new AgentRespositoryImpl(supabase);
+          const freshAgent = await dbRepository.findById(ID.from(agentId));
+
+          if (!freshAgent || (freshAgent.status?.toLowerCase() === "inactive")) {
+            console.log("[Webhook] Agent inactive, deleted, or not found after delay");
+            return;
+          }
+
+          const fullMessage = groupedMessages.join("\n");
+
+          const conversationId = memoryService.generateConversationId(freshAgent.id, whatsapp.remoteJid);
           const history = await memoryService.getHistory(conversationId);
 
           const aiResponse = await langchainService.executeAgent({
-            agent,
+            agent: freshAgent,
             messageHistory: history,
             message: fullMessage,
             whatsappContext: {

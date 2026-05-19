@@ -231,17 +231,25 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
                     }
 
                     const agentData = agents[0];
-                    const agent = await repository.findById(ID.from(agentData.id));
 
-                    if (!agent || (agent.status?.toLowerCase() === "inactive")) {
+                    if (!agentData || (agentData.status?.toLowerCase() === "inactive")) {
                         app.log.info("[WhatsApp Cloud Webhook] Agent inactive or not found");
                         return;
                     }
+
+                    const agent = AgentRespositoryImpl.parseAgentFromDB(agentData);
 
                     const concludedKey = `LeadConcluded.${agent.id.toString()}.${whatsapp.remoteJid}`;
                     const isConcluded = await redis.get(concludedKey);
                     if (isConcluded) {
                         app.log.info("[WhatsApp Cloud Webhook] Lead is concluded, ignoring user");
+                        return;
+                    }
+
+                    const convertedKey = `Converted.${agent.id.toString()}.${whatsapp.remoteJid}`;
+                    const isConverted = await redis.get(convertedKey);
+                    if (isConverted) {
+                        app.log.info("[WhatsApp Cloud Webhook] Order is already confirmed (converted), ignoring user");
                         return;
                     }
 
@@ -286,17 +294,49 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
                         return;
                     }
 
+                    // --- RE-VERIFY LOCKS AND AGENT STATUS AFTER DELAY ---
+                    const freshFromMeLock = await redis.get(fromMeLockKey);
+                    if (freshFromMeLock) {
+                        app.log.info("[WhatsApp Cloud Webhook] In fromMe window after delay, ignoring user");
+                        return;
+                    }
+
+                    const freshConcluded = await redis.get(concludedKey);
+                    if (freshConcluded) {
+                        app.log.info("[WhatsApp Cloud Webhook] Lead concluded during delay, ignoring user");
+                        return;
+                    }
+
+                    const freshConverted = await redis.get(convertedKey);
+                    if (freshConverted) {
+                        app.log.info("[WhatsApp Cloud Webhook] Order confirmed during delay, ignoring user");
+                        return;
+                    }
+
+                    // Re-query database to ensure agent is still active and has correct data
+                    const { data: freshAgents } = await supabase
+                        .from("agents")
+                        .select("*")
+                        .eq("id", agent.id.toString());
+                    
+                    if (!freshAgents || freshAgents.length === 0 || freshAgents[0].status?.toLowerCase() === "inactive") {
+                        app.log.info("[WhatsApp Cloud Webhook] Agent became inactive or was deleted during delay, ignoring user");
+                        return;
+                    }
+
+                    const freshAgent = AgentRespositoryImpl.parseAgentFromDB(freshAgents[0]);
+
                     const fullMessage = groupedMessages.join("\n");
 
-                    const conversationId = memoryService.generateConversationId(agent.id, whatsapp.remoteJid);
+                    const conversationId = memoryService.generateConversationId(freshAgent.id, whatsapp.remoteJid);
                     const history = await memoryService.getHistory(conversationId);
 
                     const aiResponse = await langchainService.executeAgent({
-                        agent,
+                        agent: freshAgent,
                         messageHistory: history,
                         message: fullMessage,
                         whatsappContext: {
-                            instanceName: agent.id.toString(),
+                            instanceName: freshAgent.id.toString(),
                             remoteJid: whatsapp.remoteJid,
                             sender: whatsapp.sender
                         }
