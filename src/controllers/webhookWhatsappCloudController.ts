@@ -172,7 +172,14 @@ export const webhookWhatsappCloudController = async (app: FastifyInstance) => {
                             (async () => {
                                 try {
                                     const redis = getRedisClient();
-                                    const isAiMessage = await redis.get(`wamid:${wamid}`);
+                                    let isAiMessage = null;
+
+                                    // Retry up to 3 times with 1s delay to avoid race conditions with fast status webhooks
+                                    for (let i = 0; i < 3; i++) {
+                                        isAiMessage = await redis.get(`wamid:${wamid}`);
+                                        if (isAiMessage) break;
+                                        await new Promise(resolve => setTimeout(resolve, 1000));
+                                    }
 
                                     if (!isAiMessage) {
                                         // If AI didn't send it, but we got a 'sent' status, it's the human owner

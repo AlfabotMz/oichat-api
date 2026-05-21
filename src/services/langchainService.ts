@@ -126,7 +126,6 @@ export class LangchainService {
                         ...input,
                         agent_id: agent.id.toString(),
                         instanceName: whatsappContext.instanceName,
-                        remoteJid: whatsappContext.remoteJid,
                         whatsapp_number: whatsappContext.remoteJid, // Simplified
                         number: whatsappContext.sender,
                         contact_owner: agent.contactOwner || "",

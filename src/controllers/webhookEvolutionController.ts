@@ -195,13 +195,13 @@ export const webhookController = async (app: FastifyInstance) => {
             id: new ID(`msg-${Date.now()}-user`),
             content: fullMessage,
             fromMe: false,
-            conversationId: agent.id
+            conversationId: freshAgent.id
           });
           await memoryService.addMessage(conversationId, {
             id: new ID(`msg-${Date.now()}-ai`),
             content: aiResponse,
             fromMe: true,
-            conversationId: agent.id
+            conversationId: freshAgent.id
           });
 
           // 8. Delivery
