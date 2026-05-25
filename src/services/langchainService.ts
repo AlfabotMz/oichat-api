@@ -131,13 +131,23 @@ export class LangchainService {
                         contact_owner: agent.contactOwner || "",
                         contact_delivery: agent.contactDelivery || ""
                     });
-                    return "Conversão registrada com sucesso!";
+
+                    // Conclui o lead no Redis para silenciar o assistente daqui em diante
+                    try {
+                        const redis = getRedisClient();
+                        const concludedKey = `LeadConcluded.${whatsappContext.instanceName}.${whatsappContext.remoteJid}`;
+                        await redis.set(concludedKey, "true");
+                    } catch (err) {
+                        console.error("Erro ao marcar lead como concluído no Redis:", err);
+                    }
+
+                    return "Conversão registrada e atendimento finalizado com sucesso!";
                 }
                 return "Erro: Contexto do WhatsApp ausente.";
             },
             {
                 name: "send_conversation",
-                description: "Registra uma conversão/venda. Use as informações disponíveis em <Anexos> para preencher os campos 'product' e 'amount' corretamente.",
+                description: "Registra uma conversão/venda e encerra o atendimento (conclui o lead) para que o assistente pare de enviar mensagens automáticas. Use as informações disponíveis em <Anexos> para preencher os campos 'product' e 'amount' corretamente.",
                 schema: z.object({
                     location: z.string().describe("Localização/Endereço de entrega"),
                     product: z.string().describe("Nome do produto (verifique nos <Anexos> se disponível)"),
@@ -148,24 +158,7 @@ export class LangchainService {
             }
         );
 
-        const concludeLeadTool = tool(
-            async (input) => {
-                if (whatsappContext) {
-                    const redis = getRedisClient();
-                    const concludedKey = `LeadConcluded.${whatsappContext.instanceName}.${whatsappContext.remoteJid}`;
-                    await redis.set(concludedKey, "true");
-                    return "Lead concluído com sucesso. O assistente deixará de responder daqui pra frente.";
-                }
-                return "Erro: Contexto do WhatsApp ausente.";
-            },
-            {
-                name: "conclude_lead",
-                description: "Marca o lead como concluído/finalizado, garantindo que o assistente pare de enviar mensagens automáticas para este número. Chame esta função ao considerar o atendimento totalmente concluído.",
-                schema: z.object({}),
-            }
-        );
-
-        const tools = [sendConversationTool, concludeLeadTool];
+        const tools = [sendConversationTool];
         const modelWithTools = this.model.bindTools(tools);
 
         // 2. Format Messages
@@ -185,18 +178,16 @@ export class LangchainService {
 
         // 3. Execution (Simple loop for tool calling or use AgentExecutor)
         // For brevity and compliance with the 12s grouping, we'll keep it simple
-        const chain = prompt.pipe(modelWithTools);
+        const chain = prompt.pipe(modelWithTools as any);
         const result = await chain.invoke({
             input: message,
             history: chatHistory
-        });
+        }) as any;
 
         if (result.tool_calls && result.tool_calls.length > 0) {
             for (const toolCall of result.tool_calls) {
                 if (toolCall.name === "send_conversation") {
-                    await sendConversationTool.invoke(toolCall.args);
-                } else if (toolCall.name === "conclude_lead") {
-                    await concludeLeadTool.invoke(toolCall.args);
+                    await sendConversationTool.invoke(toolCall.args as any);
                 }
             }
             // Return a confirmation if a tool was called, or re-run model
