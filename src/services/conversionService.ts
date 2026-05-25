@@ -1,7 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { getRedisClient } from "../db/redisClient.ts";
 import { ID } from "../shared/types.ts";
-import { EvolutionApiService } from "./evolutionApiService.ts";
 import { AgentRespositoryImpl } from "../repository/agentRepository.ts";
 import { AnalyticsRepositoryImpl } from "../repository/analyticsRepository.ts";
 
@@ -21,33 +20,21 @@ export interface ConversionData {
 
 export class ConversionService {
     private supabase: SupabaseClient;
-    private evolutionService: EvolutionApiService;
     private agentRepository: AgentRespositoryImpl;
     private analyticsRepository: AnalyticsRepositoryImpl;
 
     constructor(supabase: SupabaseClient) {
         this.supabase = supabase;
-        this.evolutionService = new EvolutionApiService({
-            apiKey: Deno.env.get("EVOLUTION_API_KEY")!,
-            url: Deno.env.get("EVOLUTION_API_URL")!
-        });
         this.agentRepository = new AgentRespositoryImpl(supabase);
         this.analyticsRepository = new AnalyticsRepositoryImpl(supabase);
     }
 
     public async processConversion(data: ConversionData): Promise<void> {
         const {
-            location,
-            number,
-            product,
-            contact_owner,
-            contact_delivery,
             agent_id,
             instanceName,
             date,
             whatsapp_number,
-            amount,
-            quantity
         } = data;
 
         const redis = getRedisClient();
@@ -63,9 +50,6 @@ export class ConversionService {
         // 2. Update Analytics
         try {
             const agentId = ID.from(agent_id);
-            // Using existing analytics repository logic
-            // It handles create/update inside its own logic if we want, 
-            // but let's stick to the flow: check exists -> update or create
             const { data: analytics, error: fetchError } = await this.supabase
                 .from("analytics")
                 .select("*")
@@ -96,27 +80,10 @@ export class ConversionService {
         // 4. Build message
         const message = this.buildMessage(template, data);
 
-        // 5. Send notifications
-        if (contact_owner) {
-            await this.evolutionService.sendMessage({
-                instance: instanceName,
-                number: contact_owner.length <= 9 ? `258${contact_owner}` : contact_owner,
-                message: message + "\n\n🤖 Parabéns! Você tem uma nova venda."
-            });
-        }
-
-        if (contact_delivery) {
-            await this.evolutionService.sendMessage({
-                instance: instanceName,
-                number: contact_delivery.length <= 9 ? `258${contact_delivery}` : contact_delivery,
-                message: message + "\n\n🚚 Nova entrega solicitada!"
-            });
-        }
-
-        // 6. Send notification to Frontend
+        // 5. Send notification to Frontend
         await this.sendFrontendNotification(date, agent_id, message, whatsapp_number);
 
-        // 7. Save redis flag (48h)
+        // 6. Save redis flag (48h)
         await redis.set(redisKey, "true", { EX: 172800 });
     }
 
@@ -132,17 +99,21 @@ export class ConversionService {
         const webhookUrl = Deno.env.get("FRONTEND_NOTIFICATION_WEBHOOK_URL");
         if (webhookUrl) {
             try {
-                await fetch(webhookUrl, {
+                const response = await fetch(webhookUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                console.log(`[Notification] Frontend webhook sent successfully.`);
+                if (response.ok) {
+                    console.log(`[Notification] Frontend webhook sent successfully to ${webhookUrl}.`);
+                } else {
+                    console.error(`[Notification] Frontend webhook returned status ${response.status}.`);
+                }
             } catch (err) {
-                console.error(`[Notification] Failed to send frontend webhook:`, err);
+                console.error(`[Notification] Failed to send frontend webhook to ${webhookUrl}:`, err);
             }
         } else {
-            console.log(`[Notification] Simulated sending to Frontend (URL not set):`, JSON.stringify(payload));
+            console.log(`[Notification] Simulated sending to Frontend (URL not set in env variables):`, JSON.stringify(payload));
         }
     }
 
@@ -156,7 +127,8 @@ export class ConversionService {
             .replace(/{{number}}/g, vars.number ?? "")
             .replace(/{{location}}/g, vars.location ?? "")
             .replace(/{{date}}/g, vars.date ?? "")
-            .replace(/{{amount}}/g, vars.amount.toString() ?? "")
-            .replace(/{{quantity}}/g, vars.quantity.toString() ?? "");
+            .replace(/{{amount}}/g, vars.amount?.toString() ?? "")
+            .replace(/{{quantity}}/g, vars.quantity?.toString() ?? "");
     }
 }
+
