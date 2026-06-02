@@ -454,6 +454,68 @@ export const agentController = async (app: FastifyInstance) => {
     }
   });
 
+  // Sync / Invalidate Cache Endpoint (Useful for Supabase Webhooks)
+  app.post("/agents/sync-cache", {
+    schema: {
+      summary: "Invalidate and update agent cache from DB",
+      tags: ["Agent"],
+      body: {
+        type: "object",
+        properties: {
+          agent_id: { type: "string", description: "ID of the agent to sync" },
+          record: { 
+            type: "object",
+            properties: {
+              id: { type: "string" }
+            },
+            description: "Supabase webhook record format"
+          }
+        }
+      }
+    },
+  }, async (request, reply) => {
+    const body = request.body as any;
+    
+    // Suporta tanto o formato manual (agent_id) quanto o formato de webhook do Supabase (record.id)
+    const rawId = body.agent_id || body.record?.id;
+
+    if (!rawId) {
+      return reply.status(400).send({
+        success: false,
+        message: "ID do agente (agent_id ou record.id) não fornecido"
+      });
+    }
+
+    try {
+      const id = ID.from(rawId);
+      
+      // Invalida o cache removendo-o (ou buscando novamente para forçar atualização)
+      // Como o findById re-faz o cache se não encontrar, podemos usar um truque:
+      // A classe CachedAgentRepository não expõe 'del' direto pra qualquer ID fora do delete,
+      // mas podemos fazer uma leitura direta se precisarmos, ou adicionar um método de invalidate.
+      // O mais simples sem mudar o repo é chamar o delete do redis via getRedisClient, 
+      // ou se quisermos manter a abstração, adicionar um método no repositório.
+      
+      const { getRedisClient } = await import("../db/redisClient.ts");
+      const redis = getRedisClient();
+      await redis.del(`agent:${id.toString()}`);
+      
+      // Opcional: já fazer o fetch para preencher o cache logo em seguida
+      await repository.findById(id);
+
+      return reply.status(200).send({
+        success: true,
+        message: "Cache do agente sincronizado/invalidado com sucesso"
+      });
+    } catch (error) {
+      app.log.error(error, "Erro ao sincronizar cache do agente");
+      return reply.status(500).send({
+        success: false,
+        message: `Erro ao sincronizar cache: ${error}`
+      });
+    }
+  });
+
   // n8n compatible check-status endpoint
   app.post("/agents/check-status", {
     schema: {
